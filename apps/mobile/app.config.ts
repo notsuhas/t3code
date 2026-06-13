@@ -151,6 +151,7 @@ const config: ExpoConfig = {
       },
     ],
     "./plugins/withAndroidCleartextTraffic.cjs",
+    "./plugins/withModularHeaders.cjs",
   ],
   extra: {
     appVariant: APP_VARIANT,
