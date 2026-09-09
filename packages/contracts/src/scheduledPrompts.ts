@@ -83,6 +83,8 @@ export type ScheduledPromptRunState = typeof ScheduledPromptRunState.Type;
 export const ScheduledPromptRunTrigger = Schema.Literals(["scheduled", "manual"]);
 export type ScheduledPromptRunTrigger = typeof ScheduledPromptRunTrigger.Type;
 
+export const SCHEDULED_PROMPT_RUN_REASON_MAX_LENGTH = 2_000;
+
 const ScheduledPromptRunSummaryFields = {
   id: ScheduledPromptRunId,
   state: ScheduledPromptRunState,
@@ -90,7 +92,9 @@ const ScheduledPromptRunSummaryFields = {
   startedAt: Schema.NullOr(IsoDateTime),
   finishedAt: Schema.NullOr(IsoDateTime),
   threadId: Schema.NullOr(ThreadId),
-  reason: Schema.NullOr(Schema.String.check(Schema.isMaxLength(2_000))),
+  reason: Schema.NullOr(
+    Schema.String.check(Schema.isMaxLength(SCHEDULED_PROMPT_RUN_REASON_MAX_LENGTH)),
+  ),
 } as const;
 
 export const ScheduledPromptLastRunSummary = Schema.Struct(ScheduledPromptRunSummaryFields);

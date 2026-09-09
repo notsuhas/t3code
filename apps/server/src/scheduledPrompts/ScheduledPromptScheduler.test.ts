@@ -148,6 +148,48 @@ it.effect("claims a due occurrence and advances the next run", () =>
   ),
 );
 
+it.effect("collapses overdue occurrences after a clock jump", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      yield* TestClock.setTime(Date.parse("2026-01-01T00:00:00.000Z"));
+      const executed = yield* Deferred.make<void>();
+      let nextByte = 50;
+      const dependencies = Layer.mergeAll(
+        ScheduledPromptRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
+        Layer.mock(ScheduledPromptExecutor)({
+          execute: (run) => Deferred.succeed(executed, undefined).pipe(Effect.as(run.threadId!)),
+        }),
+        Layer.mock(OrchestrationEngine.OrchestrationEngineService)({
+          subscribeDomainEvents: Effect.succeed(Stream.empty),
+        }),
+        Layer.succeed(
+          Crypto.Crypto,
+          Crypto.make({
+            randomBytes: (size) => new Uint8Array(size).fill(++nextByte),
+            digest: () => Effect.die("unused"),
+          }),
+        ),
+      );
+      const context = yield* Layer.build(
+        ScheduledPromptSchedulerLive.pipe(Layer.provideMerge(dependencies)),
+      );
+      const scheduler = yield* Effect.service(ScheduledPromptScheduler).pipe(
+        Effect.provide(context),
+      );
+      const reactor = yield* Effect.service(ScheduledPromptReactor).pipe(Effect.provide(context));
+      yield* reactor.start().pipe(Effect.provide(context));
+      yield* reactor.activate;
+      const schedule = yield* scheduler.create(createInput);
+
+      yield* TestClock.setTime(Date.parse("2026-01-03T10:00:00.000Z"));
+      yield* Deferred.await(executed);
+
+      assert.strictEqual((yield* scheduler.get(schedule.id)).nextRunAt, "2026-01-04T09:00:00.000Z");
+      assert.lengthOf((yield* scheduler.runs(schedule.id, 100)).runs, 1);
+    }),
+  ),
+);
+
 it.effect("records one missed occurrence on startup and skips the backlog", () =>
   Effect.scoped(
     Effect.gen(function* () {

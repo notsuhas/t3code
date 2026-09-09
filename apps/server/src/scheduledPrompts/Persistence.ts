@@ -8,6 +8,7 @@ import {
   ScheduledPromptRunId,
   ScheduledPromptRunState,
   ScheduledPromptRunTrigger,
+  SCHEDULED_PROMPT_RUN_REASON_MAX_LENGTH,
   ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -30,6 +31,12 @@ type RepositoryError = PersistenceSqlError | PersistenceDecodeError;
 
 const encodeRecurrenceJson = Schema.encodeSync(Schema.fromJsonString(ScheduledPromptRecurrence));
 const encodeActionJson = Schema.encodeSync(Schema.fromJsonString(ScheduledPromptAction));
+
+const generatedIdSuffix = (value: string, prefix: string) =>
+  value.startsWith(prefix) ? value.slice(prefix.length) : value;
+
+const boundRunReason = (reason: string | null) =>
+  reason?.slice(0, SCHEDULED_PROMPT_RUN_REASON_MAX_LENGTH) ?? null;
 
 export const ScheduledPromptRunRecord = Schema.Struct({
   id: ScheduledPromptRunId,
@@ -198,7 +205,9 @@ const makeRun = (
   scheduleName: schedule.name,
   action: schedule.action,
   worktreeBranch:
-    schedule.action.workspace._tag === "worktree" ? `t3/schedule/${schedule.id}/${id}` : null,
+    schedule.action.workspace._tag === "worktree"
+      ? `t3/schedule/${generatedIdSuffix(schedule.id, "schedule:")}/${generatedIdSuffix(id, "run:")}`
+      : null,
 });
 
 const makeScheduledPromptRepository = Effect.gen(function* () {
@@ -526,12 +535,12 @@ const makeScheduledPromptRepository = Effect.gen(function* () {
         `;
           if (input.clearThreadId === true) {
             yield* sql`UPDATE scheduled_prompt_runs
-            SET state = ${input.state}, finished_at = ${input.finishedAt}, reason = ${input.reason},
+            SET state = ${input.state}, finished_at = ${input.finishedAt}, reason = ${boundRunReason(input.reason)},
               thread_id = NULL
             WHERE run_id = ${input.runId} AND state IN ('pending', 'running')`;
           } else {
             yield* sql`UPDATE scheduled_prompt_runs
-            SET state = ${input.state}, finished_at = ${input.finishedAt}, reason = ${input.reason}
+            SET state = ${input.state}, finished_at = ${input.finishedAt}, reason = ${boundRunReason(input.reason)}
             WHERE run_id = ${input.runId} AND state IN ('pending', 'running')`;
           }
           const scheduleId = rows[0]?.scheduleId;
@@ -583,7 +592,7 @@ const makeScheduledPromptRepository = Effect.gen(function* () {
           if (rows.length === 0) return 0;
           yield* sql`
           UPDATE scheduled_prompt_runs SET state = 'failed', finished_at = ${input.finishedAt},
-            reason = ${input.reason} WHERE state IN ('pending', 'running')
+            reason = ${boundRunReason(input.reason)} WHERE state IN ('pending', 'running')
         `;
           yield* sql`
           UPDATE scheduled_prompts SET active_run_id = NULL, updated_at = ${input.finishedAt}

@@ -33,12 +33,7 @@ import {
   toScheduledPromptRun,
   type ScheduledPromptRunRecord,
 } from "./Persistence.ts";
-import {
-  advancePastNow,
-  nextAfterScheduled,
-  nextOccurrence,
-  validateSchedule,
-} from "./Recurrence.ts";
+import { advancePastNow, nextOccurrence, validateSchedule } from "./Recurrence.ts";
 import { ScheduledPromptExecutor } from "./ScheduledPromptExecutor.ts";
 
 export interface ScheduledPromptSchedulerShape {
@@ -333,16 +328,17 @@ const make = Effect.gen(function* () {
           due,
           (schedule) =>
             Effect.gen(function* () {
-              const next = yield* nextAfterScheduled(
+              const advanced = yield* advancePastNow(
                 schedule.recurrence,
                 schedule.timezone,
                 schedule.nextRunAt!,
+                now,
               );
               const result = yield* repository.claimScheduled({
                 scheduleId: schedule.id,
                 expectedNextRunAt: schedule.nextRunAt!,
                 runId: yield* newRunId,
-                nextRunAt: Option.getOrNull(next),
+                nextRunAt: advanced.nextRunAt,
               });
               if (result._tag === "claimed") yield* enqueueClaim(result.run);
               if (result._tag !== "stale") yield* publishRevision;

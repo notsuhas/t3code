@@ -104,6 +104,37 @@ repositoryLayer("ScheduledPromptRepository", (it) => {
     }),
   );
 
+  it.effect("creates valid worktree branches from generated identifier shapes", () =>
+    Effect.gen(function* () {
+      const repository = yield* ScheduledPromptRepository;
+      const value = schedule("schedule:11111111-1111-4111-8111-111111111111", {
+        action: {
+          ...schedule("unused").action,
+          workspace: {
+            _tag: "worktree",
+            baseBranch: "main",
+            startFromOrigin: true,
+            runSetupScript: true,
+          },
+        },
+      });
+      yield* repository.upsert(value);
+
+      const claim = yield* repository.claimManual({
+        scheduleId: value.id,
+        runId: ScheduledPromptRunId.make("run:22222222-2222-4222-8222-222222222222"),
+        scheduledAt: "2026-09-09T10:00:00.000Z",
+      });
+
+      assert.strictEqual(claim._tag, "claimed");
+      if (claim._tag !== "claimed") return;
+      assert.strictEqual(
+        claim.run.worktreeBranch,
+        "t3/schedule/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222",
+      );
+    }),
+  );
+
   it.effect("records overlap skips without replacing the active run", () =>
     Effect.gen(function* () {
       const repository = yield* ScheduledPromptRepository;
@@ -275,6 +306,33 @@ repositoryLayer("ScheduledPromptRepository", (it) => {
       );
       assert.isNull(Option.getOrThrow(yield* repository.getRun(claim.run.id)).threadId);
       assert.isNull(Option.getOrThrow(yield* repository.get(value.id)).activeRunId);
+    }),
+  );
+
+  it.effect("bounds persisted failure reasons to the wire contract limit", () =>
+    Effect.gen(function* () {
+      const repository = yield* ScheduledPromptRepository;
+      const value = schedule("schedule-long-reason");
+      yield* repository.upsert(value);
+      const claim = yield* repository.claimManual({
+        scheduleId: value.id,
+        runId: ScheduledPromptRunId.make("run-long-reason"),
+        scheduledAt: "2026-09-09T10:00:00.000Z",
+      });
+      assert.strictEqual(claim._tag, "claimed");
+      if (claim._tag !== "claimed") return;
+
+      yield* repository.finish({
+        runId: claim.run.id,
+        state: "failed",
+        finishedAt: "2026-09-09T10:00:01.000Z",
+        reason: "x".repeat(2_001),
+      });
+
+      assert.strictEqual(
+        Option.getOrThrow(yield* repository.getRun(claim.run.id)).reason?.length,
+        2_000,
+      );
     }),
   );
 
