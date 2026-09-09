@@ -3,6 +3,7 @@ import {
   ProviderInstanceId,
   ScheduledPromptId,
   ScheduledPromptRunId,
+  ThreadId,
 } from "@t3tools/contracts";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -10,10 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
-import {
-  ScheduledPromptRepository,
-  ScheduledPromptRepositoryLive,
-} from "./Persistence.ts";
+import { ScheduledPromptRepository, ScheduledPromptRepositoryLive } from "./Persistence.ts";
 
 const repositoryLayer = it.layer(
   ScheduledPromptRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
@@ -126,7 +124,10 @@ repositoryLayer("ScheduledPromptRepository", (it) => {
         Option.getOrThrow(yield* repository.get(value.id)).activeRunId,
         ScheduledPromptRunId.make("run-active"),
       );
-      assert.strictEqual(Option.getOrThrow(yield* repository.getRun(ScheduledPromptRunId.make("run-skipped"))).state, "skipped");
+      assert.strictEqual(
+        Option.getOrThrow(yield* repository.getRun(ScheduledPromptRunId.make("run-skipped"))).state,
+        "skipped",
+      );
     }),
   );
 
@@ -144,10 +145,98 @@ repositoryLayer("ScheduledPromptRepository", (it) => {
 
       yield* repository.delete(value.id);
       assert.strictEqual(
-        Option.getOrThrow(yield* repository.getRun(ScheduledPromptRunId.make("run-delete"))).action.prompt,
+        Option.getOrThrow(yield* repository.getRun(ScheduledPromptRunId.make("run-delete"))).action
+          .prompt,
         "Check the backups",
       );
       assert.strictEqual((yield* repository.listRuns(value.id, 100)).length, 1);
+    }),
+  );
+
+  it.effect("recovers unfinished runs and finalizes linked threads idempotently", () =>
+    Effect.gen(function* () {
+      const repository = yield* ScheduledPromptRepository;
+      const value = schedule("schedule-lifecycle");
+      yield* repository.upsert(value);
+      const claim = yield* repository.claimManual({
+        scheduleId: value.id,
+        runId: ScheduledPromptRunId.make("run-lifecycle"),
+        scheduledAt: "2026-09-09T10:00:00.000Z",
+      });
+      assert.strictEqual(claim._tag, "claimed");
+      if (claim._tag !== "claimed") return;
+
+      const threadId = ThreadId.make("scheduled:run-lifecycle:thread");
+      assert.isTrue(
+        yield* repository.markRunning({
+          runId: claim.run.id,
+          threadId,
+          startedAt: "2026-09-09T10:00:01.000Z",
+        }),
+      );
+      assert.isFalse(
+        yield* repository.markRunning({
+          runId: claim.run.id,
+          threadId,
+          startedAt: "2026-09-09T10:00:02.000Z",
+        }),
+      );
+      assert.isTrue(
+        yield* repository.finishByThread({
+          threadId,
+          state: "succeeded",
+          finishedAt: "2026-09-09T10:05:00.000Z",
+          reason: null,
+        }),
+      );
+      assert.isFalse(
+        yield* repository.finishByThread({
+          threadId,
+          state: "failed",
+          finishedAt: "2026-09-09T10:06:00.000Z",
+          reason: "late duplicate",
+        }),
+      );
+      assert.strictEqual(
+        Option.getOrThrow(yield* repository.getRun(claim.run.id)).state,
+        "succeeded",
+      );
+      assert.isNull(Option.getOrThrow(yield* repository.get(value.id)).activeRunId);
+    }),
+  );
+
+  it.effect("marks process-orphaned runs failed on startup", () =>
+    Effect.gen(function* () {
+      const repository = yield* ScheduledPromptRepository;
+      const value = schedule("schedule-recovery");
+      yield* repository.upsert(value);
+      const claim = yield* repository.claimManual({
+        scheduleId: value.id,
+        runId: ScheduledPromptRunId.make("run-recovery"),
+        scheduledAt: "2026-09-09T10:00:00.000Z",
+      });
+      assert.strictEqual(claim._tag, "claimed");
+
+      assert.isAtLeast(
+        yield* repository.failUnfinished({
+          finishedAt: "2026-09-09T10:01:00.000Z",
+          reason: "Server restarted before the run completed",
+        }),
+        1,
+      );
+      assert.strictEqual(
+        yield* repository.failUnfinished({
+          finishedAt: "2026-09-09T10:02:00.000Z",
+          reason: "Server restarted before the run completed",
+        }),
+        0,
+      );
+      assert.strictEqual(
+        Option.getOrThrow(yield* repository.getRun(ScheduledPromptRunId.make("run-recovery")))
+          .state,
+        "failed",
+      );
+      assert.isNull(Option.getOrThrow(yield* repository.get(value.id)).activeRunId);
     }),
   );
 });
