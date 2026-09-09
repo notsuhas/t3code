@@ -311,6 +311,10 @@ const ScheduledPromptLayerLive = ScheduledPromptSchedulerLive.pipe(
   Layer.provideMerge(ScheduledPromptRepositoryLive),
 );
 
+const ThreadTurnBootstrapLayerLive = ThreadTurnBootstrapLive.pipe(
+  Layer.provideMerge(ThreadDeletionReactorLive),
+);
+
 const VcsDriverRegistryLayerLive = VcsDriverRegistry.layer.pipe(
   Layer.provide(VcsProjectConfig.layer),
 );
@@ -464,7 +468,7 @@ const AntigravityInstallationRefreshLive = Layer.effectDiscard(
 
 const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ScheduledPromptLayerLive),
-  Layer.provideMerge(ThreadTurnBootstrapLive),
+  Layer.provideMerge(ThreadTurnBootstrapLayerLive),
   Layer.provideMerge(AntigravityInstallationRefreshLive),
   Layer.provideMerge(ProviderAuthServiceLive),
   // Core Services

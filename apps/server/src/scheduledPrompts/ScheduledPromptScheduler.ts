@@ -82,7 +82,7 @@ export interface ScheduledPromptReactorShape {
 export class ScheduledPromptReactor extends Context.Service<
   ScheduledPromptReactor,
   ScheduledPromptReactorShape
->()("t3/scheduledPrompts/ScheduledPromptReactor") {}
+>()("t3/scheduledPrompts/ScheduledPromptScheduler/ScheduledPromptReactor") {}
 
 const scheduledError = (reason: ScheduledPromptError["reason"], message: string) =>
   new ScheduledPromptError({ reason, message });
@@ -472,6 +472,7 @@ const make = Effect.gen(function* () {
       yield* Effect.forkScoped(Deferred.await(activation).pipe(Effect.andThen(wakeLoop)));
     });
   const activate = recover.pipe(
+    Effect.orDie,
     Effect.andThen(Deferred.succeed(activation, undefined)),
     Effect.asVoid,
   );

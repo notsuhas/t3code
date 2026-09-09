@@ -158,7 +158,10 @@ it.effect("dispatches a project-root run with deterministic identifiers", () =>
 
 it.effect("uses the immutable claimed worktree settings", () =>
   Effect.gen(function* () {
-    const dispatch = vi.fn((_: OrchestrationCommand) => Effect.succeed({ sequence: 1 }));
+    const dispatch = vi.fn((command: OrchestrationCommand) => {
+      void command;
+      return Effect.succeed({ sequence: 1 });
+    });
     const worktreeRun = {
       ...run,
       action: {

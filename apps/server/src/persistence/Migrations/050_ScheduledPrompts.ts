@@ -48,6 +48,10 @@ export default Effect.gen(function* () {
     CREATE INDEX IF NOT EXISTS scheduled_prompt_runs_state_idx
     ON scheduled_prompt_runs (state)
   `;
+  yield* sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS scheduled_prompt_runs_thread_idx
+    ON scheduled_prompt_runs (thread_id) WHERE thread_id IS NOT NULL
+  `;
 
   yield* sql`
     CREATE TABLE IF NOT EXISTS scheduled_prompt_state (

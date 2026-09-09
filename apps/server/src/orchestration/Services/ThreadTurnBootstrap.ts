@@ -7,6 +7,8 @@ import type {
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 
+import type { OrchestrationDispatchError } from "../Errors.ts";
+
 export type BootstrapTurnStartCommand = Extract<
   OrchestrationCommand,
   { type: "thread.turn.start" }
@@ -15,7 +17,7 @@ export type BootstrapTurnStartCommand = Extract<
 export interface ThreadTurnBootstrapOptions {
   readonly dispatch: (
     command: OrchestrationCommand,
-  ) => Effect.Effect<{ readonly sequence: number }, unknown>;
+  ) => Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchError>;
   readonly commandId: (tag: string) => Effect.Effect<CommandId, OrchestrationDispatchCommandError>;
   readonly eventId: Effect.Effect<EventId, OrchestrationDispatchCommandError>;
 }

@@ -7,6 +7,7 @@ import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 
 import * as GitWorkflowService from "../../git/GitWorkflowService.ts";
 import * as ProjectSetupScriptRunner from "../../project/ProjectSetupScriptRunner.ts";
@@ -20,8 +21,10 @@ import { ThreadDeletionReactor } from "../Services/ThreadDeletionReactor.ts";
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
+const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
+
 const toDispatchError = (cause: unknown, fallbackMessage: string) =>
-  cause instanceof OrchestrationDispatchCommandError
+  isOrchestrationDispatchCommandError(cause)
     ? cause
     : new OrchestrationDispatchCommandError({
         message: cause instanceof Error ? cause.message : fallbackMessage,
@@ -58,6 +61,15 @@ const make = Effect.gen(function* () {
   const threadDeletionReactor = yield* ThreadDeletionReactor;
   const vcsStatusBroadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
 
+  const dispatchCommand = (options: ThreadTurnBootstrapOptions, command: OrchestrationCommand) =>
+    options
+      .dispatch(command)
+      .pipe(
+        Effect.mapError((cause) =>
+          toDispatchError(cause, "Failed to dispatch bootstrap orchestration command."),
+        ),
+      );
+
   const refreshGitStatus = (cwd: string) =>
     vcsStatusBroadcaster
       .refreshStatus(cwd)
@@ -79,7 +91,7 @@ const make = Effect.gen(function* () {
       activityId: options.eventId,
     }).pipe(
       Effect.flatMap(({ commandId, activityId }) =>
-        options.dispatch({
+        dispatchCommand(options, {
           type: "thread.activity.append",
           commandId,
           threadId: input.threadId,
@@ -110,7 +122,7 @@ const make = Effect.gen(function* () {
         createdThread
           ? options.commandId("bootstrap-thread-delete").pipe(
               Effect.flatMap((commandId) =>
-                options.dispatch({
+                dispatchCommand(options, {
                   type: "thread.delete",
                   commandId,
                   threadId: command.threadId,
@@ -226,7 +238,7 @@ const make = Effect.gen(function* () {
 
       const program = Effect.gen(function* () {
         if (bootstrap?.createThread) {
-          const created = yield* options.dispatch({
+          const created = yield* dispatchCommand(options, {
             type: "thread.create",
             commandId: yield* options.commandId("bootstrap-thread-create"),
             threadId: command.threadId,
@@ -278,7 +290,7 @@ const make = Effect.gen(function* () {
             path: null,
           });
           targetWorktreePath = worktree.worktree.path;
-          yield* options.dispatch({
+          yield* dispatchCommand(options, {
             type: "thread.meta.update",
             commandId: yield* options.commandId("bootstrap-thread-meta-update"),
             threadId: command.threadId,
@@ -289,7 +301,7 @@ const make = Effect.gen(function* () {
         }
 
         yield* runSetupProgram();
-        return yield* options.dispatch(finalTurnStartCommand as OrchestrationCommand);
+        return yield* dispatchCommand(options, finalTurnStartCommand as OrchestrationCommand);
       });
 
       return yield* program.pipe(

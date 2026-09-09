@@ -28,6 +28,9 @@ import {
 
 type RepositoryError = PersistenceSqlError | PersistenceDecodeError;
 
+const encodeRecurrenceJson = Schema.encodeSync(Schema.fromJsonString(ScheduledPromptRecurrence));
+const encodeActionJson = Schema.encodeSync(Schema.fromJsonString(ScheduledPromptAction));
+
 export const ScheduledPromptRunRecord = Schema.Struct({
   id: ScheduledPromptRunId,
   scheduleId: ScheduledPromptId,
@@ -260,7 +263,7 @@ const makeScheduledPromptRepository = Effect.gen(function* () {
             action_json, next_run_at, active_run_id, created_at, updated_at
           ) VALUES (
             ${schedule.id}, ${schedule.name}, ${schedule.description}, ${schedule.enabled ? 1 : 0},
-            ${schedule.timezone}, ${JSON.stringify(schedule.recurrence)}, ${JSON.stringify(schedule.action)},
+            ${schedule.timezone}, ${encodeRecurrenceJson(schedule.recurrence)}, ${encodeActionJson(schedule.action)},
             ${schedule.nextRunAt}, ${schedule.activeRunId}, ${schedule.createdAt}, ${schedule.updatedAt}
           )
           ON CONFLICT (schedule_id) DO UPDATE SET
@@ -293,7 +296,7 @@ const makeScheduledPromptRepository = Effect.gen(function* () {
         ) VALUES (
           ${run.id}, ${run.scheduleId}, ${run.state}, ${run.trigger}, ${run.scheduledAt},
           ${run.startedAt}, ${run.finishedAt}, ${run.threadId}, ${run.reason},
-          ${run.scheduleName}, ${JSON.stringify(run.action)}, ${run.worktreeBranch}
+          ${run.scheduleName}, ${encodeActionJson(run.action)}, ${run.worktreeBranch}
         )
       `;
       yield* sql`

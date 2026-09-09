@@ -811,7 +811,7 @@ export const make = (options?: StartupOptions) =>
     const keybindings = yield* Keybindings.Keybindings;
     const orchestrationReactor = yield* OrchestrationReactor.OrchestrationReactor;
     const providerSessionReaper = yield* ProviderSessionReaper.ProviderSessionReaper;
-    const scheduledPromptReactor = yield* ScheduledPromptReactor;
+    const scheduledPromptReactor = yield* Effect.serviceOption(ScheduledPromptReactor);
     const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
     const serverSettings = yield* ServerSettings.ServerSettingsService;
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
@@ -874,7 +874,9 @@ export const make = (options?: StartupOptions) =>
         Effect.gen(function* () {
           yield* orchestrationReactor.start().pipe(Scope.provide(reactorScope));
           yield* providerSessionReaper.start().pipe(Scope.provide(reactorScope));
-          yield* scheduledPromptReactor.start().pipe(Scope.provide(reactorScope));
+          if (Option.isSome(scheduledPromptReactor)) {
+            yield* scheduledPromptReactor.value.start().pipe(Scope.provide(reactorScope));
+          }
         }),
       );
 
@@ -972,7 +974,9 @@ export const make = (options?: StartupOptions) =>
       yield* options?.activate ?? Effect.void;
 
       yield* Effect.logDebug("Accepting commands");
-      yield* scheduledPromptReactor.activate;
+      if (Option.isSome(scheduledPromptReactor)) {
+        yield* scheduledPromptReactor.value.activate;
+      }
       yield* commandGate.signalCommandReady;
       yield* runStartupPhase(
         "ready.publish",
