@@ -1,14 +1,17 @@
 import type { ScheduledPromptRecurrence } from "@t3tools/contracts";
 
 import { Input } from "../ui/input";
+import { formatScheduleOnceInput, parseScheduleOnceInput } from "./schedulePresentation";
 
 const selectClass =
   "h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20";
 
 export function ScheduleRecurrenceFields({
+  timezone,
   value,
   onChange,
 }: {
+  readonly timezone: string;
   readonly value: ScheduledPromptRecurrence;
   readonly onChange: (value: ScheduledPromptRecurrence) => void;
 }) {
@@ -67,11 +70,10 @@ export function ScheduleRecurrenceFields({
           <Input
             nativeInput
             type="datetime-local"
-            value={value.at.slice(0, 16)}
+            value={formatScheduleOnceInput(value.at, timezone)}
             onChange={(event) => {
-              if (event.target.value) {
-                onChange({ _tag: "once", at: new Date(event.target.value).toISOString() });
-              }
+              const at = parseScheduleOnceInput(event.target.value, timezone);
+              if (at !== null) onChange({ _tag: "once", at });
             }}
           />
         </label>

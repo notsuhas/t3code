@@ -917,6 +917,62 @@ for (const preparedStatus of [
   );
 }
 
+it.effect("does not continue scheduled prompt threads after restart", () => {
+  const turnId = TurnId.make("turn-scheduled-restart");
+  const thread = makeThread("scheduled:run:test:thread", "running", turnId);
+  const sends: ProviderSendTurnInput[] = [];
+  const dispatched: OrchestrationCommand[] = [];
+  const upserts: ProviderSessionDirectory.ProviderRuntimeBinding[] = [];
+  const binding = {
+    threadId: thread.id,
+    provider: ProviderDriverKind.make("codex"),
+    providerInstanceId,
+    status: "running" as const,
+    resumeCursor: { threadId: thread.id },
+    runtimePayload: { activeTurnId: turnId },
+  };
+
+  return runReconciliation({
+    threads: [thread],
+    continueAfterRestart: true,
+    providerService: {
+      ...makeProviderService(),
+      getCapabilities: () =>
+        Effect.die("scheduled prompt continuation must not inspect capabilities"),
+      sendTurn: (input) => Effect.sync(() => sends.push(input)).pipe(Effect.as({} as never)),
+    },
+    directory: {
+      getBinding: () => Effect.succeed(Option.some(binding)),
+      upsert: (next) => Effect.sync(() => upserts.push(next)),
+      recordImportedTranscript: () => Effect.die("unused"),
+      getProvider: () => Effect.die("unused"),
+      listThreadIds: () => Effect.die("unused"),
+      listBindings: () => Effect.succeed([]),
+    },
+    dispatch: (command) =>
+      Effect.sync(() => {
+        dispatched.push(command);
+        return { sequence: dispatched.length };
+      }),
+  }).pipe(
+    Effect.tap(() =>
+      Effect.sync(() => {
+        assert.deepStrictEqual(sends, []);
+        assert.deepStrictEqual(
+          dispatched.map((command) =>
+            command.type === "thread.session.set" ? command.session.status : command.type,
+          ),
+          ["error"],
+        );
+        assert.deepStrictEqual(
+          upserts.map((entry) => entry.status),
+          ["stopped"],
+        );
+      }),
+    ),
+  );
+});
+
 it.effect("settles failed opt-in recovery without retrying the provider turn", () =>
   Effect.gen(function* () {
     const turnId = TurnId.make("turn-failed-recovery");

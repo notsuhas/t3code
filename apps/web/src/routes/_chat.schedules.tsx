@@ -99,7 +99,7 @@ function SchedulesRoute() {
         {environmentId === null ? (
           <UnsupportedState />
         ) : (
-          <SchedulesWorkspace environmentId={environmentId} />
+          <SchedulesWorkspace key={environmentId} environmentId={environmentId} />
         )}
       </div>
     </SidebarInset>
@@ -400,7 +400,10 @@ function ScheduleDetail({
 
       <dl className="mt-8 grid gap-x-8 gap-y-5 border-y border-border py-5 sm:grid-cols-2">
         <Datum label="Next run" value={formatScheduleNextRun(schedule)} />
-        <Datum label="Recurrence" value={formatScheduleRecurrence(schedule.recurrence)} />
+        <Datum
+          label="Recurrence"
+          value={formatScheduleRecurrence(schedule.recurrence, schedule.timezone)}
+        />
         <Datum label="Project" value={projectTitle} />
         <Datum label="Timezone" value={schedule.timezone} />
         <Datum

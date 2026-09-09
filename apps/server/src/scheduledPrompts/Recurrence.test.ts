@@ -52,9 +52,7 @@ describe("scheduled prompt recurrence", () => {
         Option.getOrNull(yield* nextOccurrence(recurrence, "UTC", "2026-09-09T19:59:59.999Z")),
         recurrence.at,
       );
-      assert.isTrue(
-        Option.isNone(yield* nextOccurrence(recurrence, "UTC", recurrence.at)),
-      );
+      assert.isTrue(Option.isNone(yield* nextOccurrence(recurrence, "UTC", recurrence.at)));
     }),
   );
 
@@ -82,6 +80,17 @@ describe("scheduled prompt recurrence", () => {
         "2026-09-09T10:15:00.000Z",
       );
       assert.strictEqual(Option.getOrNull(next), "2026-09-09T11:15:00.000Z");
+    }),
+  );
+
+  it.effect("canonicalizes one-time occurrences to UTC", () =>
+    Effect.gen(function* () {
+      const next = yield* nextOccurrence(
+        { _tag: "once", at: "2026-09-09T09:00:00.000+05:30" },
+        "Asia/Kolkata",
+        "2026-09-09T03:00:00.000Z",
+      );
+      assert.strictEqual(Option.getOrNull(next), "2026-09-09T03:30:00.000Z");
     }),
   );
 

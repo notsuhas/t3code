@@ -1,7 +1,4 @@
-import type {
-  IsoDateTime,
-  ScheduledPromptRecurrence,
-} from "@t3tools/contracts";
+import type { IsoDateTime, ScheduledPromptRecurrence } from "@t3tools/contracts";
 import { ScheduledPromptError } from "@t3tools/contracts";
 import * as Cron from "effect/Cron";
 import * as DateTime from "effect/DateTime";
@@ -52,10 +49,7 @@ const validateTimezone = (timezone: string) =>
     ? Effect.void
     : Effect.fail(validationError(`Invalid time zone: ${timezone}`));
 
-export const validateSchedule = (
-  recurrence: ScheduledPromptRecurrence,
-  timezone: string,
-) =>
+export const validateSchedule = (recurrence: ScheduledPromptRecurrence, timezone: string) =>
   Effect.gen(function* () {
     yield* validateTimezone(timezone);
     if (recurrence._tag === "once") {
@@ -77,7 +71,7 @@ export const nextOccurrence = (
     if (recurrence._tag === "once") {
       const at = yield* parseInstant(recurrence.at);
       return DateTime.toEpochMillis(at) > DateTime.toEpochMillis(after)
-        ? Option.some(recurrence.at)
+        ? Option.some(DateTime.formatIso(DateTime.toUtc(at)))
         : Option.none<IsoDateTime>();
     }
 

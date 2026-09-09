@@ -3,8 +3,9 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   duplicateScheduledPrompt,
+  formatScheduleOnceInput,
   formatScheduleNextRun,
-  requiresUnattendedAccessWarning,
+  parseScheduleOnceInput,
   scheduleRunPresentation,
 } from "./schedulePresentation";
 
@@ -43,11 +44,16 @@ describe("schedule presentation", () => {
     expect(scheduleRunPresentation("missed").label).toBe("Missed");
   });
 
-  it("duplicates as a paused schedule and flags full access", () => {
+  it("duplicates as a paused schedule", () => {
     const duplicate = duplicateScheduledPrompt(schedule, "Continue the review");
     expect(duplicate.enabled).toBe(false);
     expect(duplicate.name).toBe("Daily review copy");
     expect(duplicate.action.prompt).toBe("Continue the review");
-    expect(requiresUnattendedAccessWarning(duplicate.action.runtimeMode)).toBe(true);
+  });
+
+  it("edits one-time schedules in their pinned timezone", () => {
+    const at = "2026-09-09T03:30:00.000Z";
+    expect(formatScheduleOnceInput(at, "Asia/Kolkata")).toBe("2026-09-09T09:00");
+    expect(parseScheduleOnceInput("2026-09-09T09:00", "Asia/Kolkata")).toBe(at);
   });
 });

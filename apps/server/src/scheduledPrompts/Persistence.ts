@@ -97,6 +97,8 @@ export interface ScheduledPromptRepositoryShape {
     ReadonlyArray<ScheduledPromptRunRecord>,
     RepositoryError
   >;
+  readonly listLatestRuns: Effect.Effect<ReadonlyArray<ScheduledPromptRunRecord>, RepositoryError>;
+  readonly nextEnabledRunAt: Effect.Effect<Option.Option<IsoDateTime>, RepositoryError>;
   readonly markRunning: (input: {
     readonly runId: ScheduledPromptRunId;
     readonly threadId: ThreadId;
@@ -111,6 +113,7 @@ export interface ScheduledPromptRepositoryShape {
     readonly state: "succeeded" | "failed";
     readonly finishedAt: IsoDateTime;
     readonly reason: string | null;
+    readonly clearThreadId?: boolean;
   }) => Effect.Effect<boolean, RepositoryError>;
   readonly finishByThread: (input: {
     readonly threadId: ThreadId;
@@ -270,7 +273,7 @@ const makeScheduledPromptRepository = Effect.gen(function* () {
             name = excluded.name, description = excluded.description, enabled = excluded.enabled,
             timezone = excluded.timezone, recurrence_json = excluded.recurrence_json,
             action_json = excluded.action_json, next_run_at = excluded.next_run_at,
-            active_run_id = excluded.active_run_id, updated_at = excluded.updated_at
+            active_run_id = scheduled_prompts.active_run_id, updated_at = excluded.updated_at
         `;
           yield* bumpRevision;
         }),
@@ -287,6 +290,18 @@ const makeScheduledPromptRepository = Effect.gen(function* () {
       )
       .pipe(Effect.mapError(mapRepositoryError("ScheduledPromptRepository.delete")));
 
+  const pruneRunHistory = (scheduleId: ScheduledPromptId) =>
+    sql`
+      DELETE FROM scheduled_prompt_runs
+      WHERE schedule_id = ${scheduleId}
+        AND state NOT IN ('pending', 'running')
+        AND run_id NOT IN (
+          SELECT run_id FROM scheduled_prompt_runs
+          WHERE schedule_id = ${scheduleId}
+          ORDER BY scheduled_at DESC, run_id DESC LIMIT 100
+        )
+    `;
+
   const insertRun = (run: ScheduledPromptRunRecord) =>
     Effect.gen(function* () {
       yield* sql`
@@ -299,15 +314,7 @@ const makeScheduledPromptRepository = Effect.gen(function* () {
           ${run.scheduleName}, ${encodeActionJson(run.action)}, ${run.worktreeBranch}
         )
       `;
-      yield* sql`
-        DELETE FROM scheduled_prompt_runs
-        WHERE schedule_id = ${run.scheduleId}
-          AND run_id NOT IN (
-            SELECT run_id FROM scheduled_prompt_runs
-            WHERE schedule_id = ${run.scheduleId}
-            ORDER BY scheduled_at DESC, run_id DESC LIMIT 100
-          )
-      `;
+      yield* pruneRunHistory(run.scheduleId);
     });
 
   const claimScheduled: ScheduledPromptRepositoryShape["claimScheduled"] = (input) =>
@@ -406,7 +413,11 @@ const makeScheduledPromptRepository = Effect.gen(function* () {
       )
       .pipe(Effect.mapError(mapRepositoryError("ScheduledPromptRepository.recordMissed")));
 
-  const selectRun = (kind: "one" | "history" | "unfinished", value?: string, limit = 100) => {
+  const selectRun = (
+    kind: "one" | "history" | "unfinished" | "latest",
+    value?: string,
+    limit = 100,
+  ) => {
     const columns = sql`run_id AS "id", schedule_id AS "scheduleId", state, trigger,
       scheduled_at AS "scheduledAt", started_at AS "startedAt", finished_at AS "finishedAt",
       thread_id AS "threadId", reason, schedule_name AS "scheduleName",
@@ -416,12 +427,19 @@ const makeScheduledPromptRepository = Effect.gen(function* () {
       : kind === "history"
         ? sql`SELECT ${columns} FROM scheduled_prompt_runs WHERE schedule_id = ${value}
             ORDER BY scheduled_at DESC, run_id DESC LIMIT ${limit}`
-        : sql`SELECT ${columns} FROM scheduled_prompt_runs
-            WHERE state IN ('pending', 'running') ORDER BY scheduled_at ASC, run_id ASC`;
+        : kind === "unfinished"
+          ? sql`SELECT ${columns} FROM scheduled_prompt_runs
+              WHERE state IN ('pending', 'running') ORDER BY scheduled_at ASC, run_id ASC`
+          : sql`SELECT ${columns} FROM scheduled_prompt_runs AS candidate
+              WHERE run_id = (
+                SELECT latest.run_id FROM scheduled_prompt_runs AS latest
+                WHERE latest.schedule_id = candidate.schedule_id
+                ORDER BY latest.scheduled_at DESC, latest.run_id DESC LIMIT 1
+              )`;
   };
   const decodeRunRows = SqlSchema.findAll({
     Request: Schema.Struct({
-      kind: Schema.Literals(["one", "history", "unfinished"]),
+      kind: Schema.Literals(["one", "history", "unfinished", "latest"]),
       value: Schema.optional(Schema.String),
       limit: Schema.optional(Schema.Number),
     }),
@@ -439,6 +457,22 @@ const makeScheduledPromptRepository = Effect.gen(function* () {
     );
   const listUnfinishedRuns = decodeRunRows({ kind: "unfinished" }).pipe(
     Effect.mapError(mapRepositoryError("ScheduledPromptRepository.listUnfinishedRuns")),
+  );
+  const listLatestRuns = decodeRunRows({ kind: "latest" }).pipe(
+    Effect.mapError(mapRepositoryError("ScheduledPromptRepository.listLatestRuns")),
+  );
+
+  const decodeNextEnabledRunAt = SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: Schema.Struct({ nextRunAt: Schema.NullOr(IsoDateTime) }),
+    execute: () => sql`
+      SELECT MIN(next_run_at) AS "nextRunAt" FROM scheduled_prompts
+      WHERE enabled = 1 AND next_run_at IS NOT NULL
+    `,
+  });
+  const nextEnabledRunAt = decodeNextEnabledRunAt(undefined).pipe(
+    Effect.map((row) => Option.fromNullable(row.nextRunAt)),
+    Effect.mapError(mapRepositoryError("ScheduledPromptRepository.nextEnabledRunAt")),
   );
 
   const markRunning: ScheduledPromptRepositoryShape["markRunning"] = (input) =>
@@ -490,13 +524,21 @@ const makeScheduledPromptRepository = Effect.gen(function* () {
           const rows = yield* sql<{ readonly scheduleId: string }>`
           SELECT schedule_id AS "scheduleId" FROM scheduled_prompt_runs WHERE run_id = ${input.runId}
         `;
-          yield* sql`UPDATE scheduled_prompt_runs
-          SET state = ${input.state}, finished_at = ${input.finishedAt}, reason = ${input.reason}
-          WHERE run_id = ${input.runId} AND state IN ('pending', 'running')`;
+          if (input.clearThreadId === true) {
+            yield* sql`UPDATE scheduled_prompt_runs
+            SET state = ${input.state}, finished_at = ${input.finishedAt}, reason = ${input.reason},
+              thread_id = NULL
+            WHERE run_id = ${input.runId} AND state IN ('pending', 'running')`;
+          } else {
+            yield* sql`UPDATE scheduled_prompt_runs
+            SET state = ${input.state}, finished_at = ${input.finishedAt}, reason = ${input.reason}
+            WHERE run_id = ${input.runId} AND state IN ('pending', 'running')`;
+          }
           const scheduleId = rows[0]?.scheduleId;
           if (scheduleId !== undefined) {
             yield* sql`UPDATE scheduled_prompts SET active_run_id = NULL, updated_at = ${input.finishedAt}
             WHERE schedule_id = ${scheduleId} AND active_run_id = ${input.runId}`;
+            yield* pruneRunHistory(ScheduledPromptId.make(scheduleId));
           }
           yield* bumpRevision;
           return true;
@@ -573,6 +615,8 @@ const makeScheduledPromptRepository = Effect.gen(function* () {
     getRun,
     listRuns,
     listUnfinishedRuns,
+    listLatestRuns,
+    nextEnabledRunAt,
     markRunning,
     markRunningByThread,
     finish,

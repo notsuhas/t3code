@@ -142,6 +142,7 @@ export function ScheduleEditor({
         </Field>
 
         <ScheduleRecurrenceFields
+          timezone={draft.timezone}
           value={draft.recurrence}
           onChange={(recurrence) => setDraft({ ...draft, recurrence })}
         />

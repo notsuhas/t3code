@@ -566,6 +566,7 @@ export const reconcileProviderSessions = Effect.gen(function* () {
       Option.isSome(binding) &&
       readRuntimePayload(binding.value.runtimePayload).activeTurnId === null &&
       readRuntimePayload(binding.value.runtimePayload).continueAfterServerUpdatePrepared === true;
+    const isScheduledPromptThread = String(thread.id).startsWith("scheduled:");
     // Runtime events advance the projection's turn, but not the directory's
     // last admitted turn. Use the projection to identify interrupted work.
     const interruptedByRestart =
@@ -634,6 +635,7 @@ export const reconcileProviderSessions = Effect.gen(function* () {
       });
 
     if (
+      !isScheduledPromptThread &&
       Option.isSome(binding) &&
       (continuationMarked || interruptedByRestart) &&
       (session.status === "running" || session.status === "starting" || preparedWhileReady) &&

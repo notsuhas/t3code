@@ -83,9 +83,13 @@ repositoryLayer("ScheduledPromptRepository", (it) => {
         name: "Edited later",
         action: { ...value.action, prompt: "A different prompt" },
         nextRunAt: "2026-09-09T11:15:00.000Z",
-        activeRunId: claim.run.id,
+        activeRunId: null,
         updatedAt: "2026-09-09T10:16:00.000Z",
       });
+      assert.strictEqual(
+        Option.getOrThrow(yield* repository.get(value.id)).activeRunId,
+        claim.run.id,
+      );
       const persisted = yield* repository.getRun(claim.run.id);
       assert.strictEqual(Option.getOrThrow(persisted).scheduleName, value.name);
       assert.strictEqual(Option.getOrThrow(persisted).action.prompt, "Check the backups");
@@ -128,6 +132,48 @@ repositoryLayer("ScheduledPromptRepository", (it) => {
         Option.getOrThrow(yield* repository.getRun(ScheduledPromptRunId.make("run-skipped"))).state,
         "skipped",
       );
+    }),
+  );
+
+  it.effect("retains an old active run while pruning overlap history", () =>
+    Effect.gen(function* () {
+      const repository = yield* ScheduledPromptRepository;
+      const value = schedule("schedule-retention");
+      yield* repository.upsert(value);
+      const active = yield* repository.claimManual({
+        scheduleId: value.id,
+        runId: ScheduledPromptRunId.make("run-retention-active"),
+        scheduledAt: "2026-09-09T10:00:00.000Z",
+      });
+      assert.strictEqual(active._tag, "claimed");
+
+      for (let index = 0; index < 101; index += 1) {
+        const skipped = yield* repository.claimManual({
+          scheduleId: value.id,
+          runId: ScheduledPromptRunId.make(`run-retention-skipped-${index}`),
+          scheduledAt: new Date(
+            Date.parse("2026-09-09T10:01:00.000Z") + index * 1_000,
+          ).toISOString(),
+        });
+        assert.strictEqual(skipped._tag, "skipped");
+      }
+
+      assert.isTrue(
+        Option.isSome(yield* repository.getRun(ScheduledPromptRunId.make("run-retention-active"))),
+      );
+      assert.strictEqual(
+        Option.getOrThrow(yield* repository.get(value.id)).activeRunId,
+        ScheduledPromptRunId.make("run-retention-active"),
+      );
+      assert.isTrue(
+        yield* repository.finishByThread({
+          threadId: ThreadId.make("scheduled:run-retention-active:thread"),
+          state: "succeeded",
+          finishedAt: "2026-09-09T11:00:00.000Z",
+          reason: null,
+        }),
+      );
+      assert.lengthOf(yield* repository.listRuns(value.id, 200), 100);
     }),
   );
 
@@ -201,6 +247,33 @@ repositoryLayer("ScheduledPromptRepository", (it) => {
         Option.getOrThrow(yield* repository.getRun(claim.run.id)).state,
         "succeeded",
       );
+      assert.isNull(Option.getOrThrow(yield* repository.get(value.id)).activeRunId);
+    }),
+  );
+
+  it.effect("clears speculative thread links when startup fails before dispatch", () =>
+    Effect.gen(function* () {
+      const repository = yield* ScheduledPromptRepository;
+      const value = schedule("schedule-preflight-failure");
+      yield* repository.upsert(value);
+      const claim = yield* repository.claimManual({
+        scheduleId: value.id,
+        runId: ScheduledPromptRunId.make("run-preflight-failure"),
+        scheduledAt: "2026-09-09T10:00:00.000Z",
+      });
+      assert.strictEqual(claim._tag, "claimed");
+      if (claim._tag !== "claimed") return;
+
+      assert.isTrue(
+        yield* repository.finish({
+          runId: claim.run.id,
+          state: "failed",
+          finishedAt: "2026-09-09T10:00:01.000Z",
+          reason: "Provider unavailable",
+          clearThreadId: true,
+        }),
+      );
+      assert.isNull(Option.getOrThrow(yield* repository.getRun(claim.run.id)).threadId);
       assert.isNull(Option.getOrThrow(yield* repository.get(value.id)).activeRunId);
     }),
   );

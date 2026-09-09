@@ -152,10 +152,7 @@ const make = Effect.gen(function* () {
     threadId: run.threadId,
     reason: run.reason,
   });
-  const toSummary = Effect.fn("ScheduledPromptScheduler.toSummary")(function* (
-    schedule: ScheduledPrompt,
-  ) {
-    const last = yield* repository.listRuns(schedule.id, 1);
+  const toSummary = (schedule: ScheduledPrompt, last: ScheduledPromptRunRecord | undefined) => {
     return {
       id: schedule.id,
       name: schedule.name,
@@ -172,13 +169,19 @@ const make = Effect.gen(function* () {
       runtimeMode: schedule.action.runtimeMode,
       interactionMode: schedule.action.interactionMode,
       workspace: schedule.action.workspace,
-      lastRun: last[0] ? lastRunSummary(last[0]) : null,
+      lastRun: last ? lastRunSummary(last) : null,
     } satisfies ScheduledPromptSummary;
-  });
+  };
 
-  const list = repository.list.pipe(
-    Effect.flatMap((schedules) => Effect.forEach(schedules, toSummary)),
-    Effect.map((schedules) => ({ schedules })),
+  const list = Effect.all({ schedules: repository.list, lastRuns: repository.listLatestRuns }).pipe(
+    Effect.map(({ schedules, lastRuns }) => {
+      const lastBySchedule = new Map(lastRuns.map((run) => [run.scheduleId, run]));
+      return {
+        schedules: schedules.map((schedule) =>
+          toSummary(schedule, lastBySchedule.get(schedule.id)),
+        ),
+      };
+    }),
     Effect.mapError(mapRepositoryError("Failed to list scheduled prompts.")),
   );
 
@@ -220,7 +223,7 @@ const make = Effect.gen(function* () {
         .upsert(schedule)
         .pipe(Effect.mapError(mapRepositoryError("Failed to update the schedule.")));
       yield* publishRevision;
-      return schedule;
+      return yield* requireSchedule(input.id);
     });
 
   const deleteSchedule: ScheduledPromptSchedulerShape["delete"] = (id) =>
@@ -245,7 +248,7 @@ const make = Effect.gen(function* () {
         .upsert(schedule)
         .pipe(Effect.mapError(mapRepositoryError("Failed to change the schedule state.")));
       yield* publishRevision;
-      return schedule;
+      return yield* requireSchedule(id);
     });
 
   const enqueueClaim = (run: ScheduledPromptRunRecord) =>
@@ -313,6 +316,7 @@ const make = Effect.gen(function* () {
               state: "failed",
               finishedAt,
               reason: cause.message,
+              clearThreadId: true,
             }),
           ),
           Effect.flatMap((changed) => (changed ? publishRevisionIgnoringFailure : Effect.void)),
@@ -389,15 +393,7 @@ const make = Effect.gen(function* () {
     );
   });
 
-  const nextWake = repository.list.pipe(
-    Effect.map(
-      (schedules) =>
-        schedules
-          .filter((schedule) => schedule.enabled && schedule.nextRunAt !== null)
-          .map((schedule) => schedule.nextRunAt!)
-          .toSorted((left, right) => epochMillis(left) - epochMillis(right))[0] ?? null,
-    ),
-  );
+  const nextWake = repository.nextEnabledRunAt.pipe(Effect.map(Option.getOrNull));
 
   const wakeLoop: Effect.Effect<void, never> = Effect.gen(function* () {
     const now = yield* nowIso;
