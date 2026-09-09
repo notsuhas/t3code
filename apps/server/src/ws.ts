@@ -140,6 +140,7 @@ import * as HostResources from "./resourceTelemetry/HostResources.ts";
 import * as AnalyticsService from "./telemetry/AnalyticsService.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
 import * as UsageService from "./usage/UsageService.ts";
+import { ScheduledPromptScheduler } from "./scheduledPrompts/ScheduledPromptScheduler.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import * as PullRequestService from "./pullRequest/PullRequestService.ts";
 import * as SourceControlDiscovery from "./sourceControl/SourceControlDiscovery.ts";
@@ -585,6 +586,7 @@ const makeWsRpcLayer = (
       const processResourceMonitor = yield* ProcessResourceMonitor.ProcessResourceMonitor;
       const resourceTelemetry = yield* ResourceTelemetry.ResourceTelemetry;
       const usage = yield* UsageService.UsageService;
+      const scheduledPrompts = yield* ScheduledPromptScheduler;
       const relayClient = yield* RelayClient.RelayClient;
       const authorizationError = (requiredScope: AuthEnvironmentScope) =>
         new EnvironmentAuthorizationError({
@@ -1816,6 +1818,60 @@ const makeWsRpcLayer = (
             ),
             { "rpc.aggregate": "cloud" },
           ),
+        [WS_METHODS.scheduledPromptsList]: (_input) =>
+          observeRpcEffect(WS_METHODS.scheduledPromptsList, scheduledPrompts.list, {
+            "rpc.aggregate": "scheduled-prompts",
+          }),
+        [WS_METHODS.scheduledPromptsGet]: (input) =>
+          observeRpcEffect(WS_METHODS.scheduledPromptsGet, scheduledPrompts.get(input.id), {
+            "rpc.aggregate": "scheduled-prompts",
+            "rpc.schedule_id": input.id,
+          }),
+        [WS_METHODS.scheduledPromptsCreate]: (input) =>
+          observeRpcEffect(WS_METHODS.scheduledPromptsCreate, scheduledPrompts.create(input), {
+            "rpc.aggregate": "scheduled-prompts",
+          }),
+        [WS_METHODS.scheduledPromptsUpdate]: (input) =>
+          observeRpcEffect(WS_METHODS.scheduledPromptsUpdate, scheduledPrompts.update(input), {
+            "rpc.aggregate": "scheduled-prompts",
+            "rpc.schedule_id": input.id,
+          }),
+        [WS_METHODS.scheduledPromptsDelete]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.scheduledPromptsDelete,
+            scheduledPrompts.delete(input.id).pipe(Effect.as({})),
+            {
+              "rpc.aggregate": "scheduled-prompts",
+              "rpc.schedule_id": input.id,
+            },
+          ),
+        [WS_METHODS.scheduledPromptsSetEnabled]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.scheduledPromptsSetEnabled,
+            scheduledPrompts.setEnabled(input.id, input.enabled),
+            {
+              "rpc.aggregate": "scheduled-prompts",
+              "rpc.schedule_id": input.id,
+            },
+          ),
+        [WS_METHODS.scheduledPromptsRunNow]: (input) =>
+          observeRpcEffect(WS_METHODS.scheduledPromptsRunNow, scheduledPrompts.runNow(input.id), {
+            "rpc.aggregate": "scheduled-prompts",
+            "rpc.schedule_id": input.id,
+          }),
+        [WS_METHODS.scheduledPromptsRuns]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.scheduledPromptsRuns,
+            scheduledPrompts.runs(input.id, input.limit ?? 100),
+            {
+              "rpc.aggregate": "scheduled-prompts",
+              "rpc.schedule_id": input.id,
+            },
+          ),
+        [WS_METHODS.scheduledPromptsSubscribe]: (_input) =>
+          observeRpcStreamEffect(WS_METHODS.scheduledPromptsSubscribe, scheduledPrompts.subscribe, {
+            "rpc.aggregate": "scheduled-prompts",
+          }),
         [WS_METHODS.pullRequestsList]: (input) =>
           observeRpcEffect(WS_METHODS.pullRequestsList, pullRequests.list(input), {
             "rpc.aggregate": "pull-requests",
