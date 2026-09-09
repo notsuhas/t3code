@@ -1,5 +1,6 @@
 import {
   ArrowLeftIcon,
+  CalendarClockIcon,
   ChartNoAxesColumnIcon,
   GitPullRequestIcon,
   SettingsIcon,
@@ -145,13 +146,18 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             ? "usage"
             : location.pathname === "/pull-requests"
               ? "pull-requests"
-              : null,
+              : location.pathname === "/schedules"
+                ? "schedules"
+                : null,
   });
   const { environments } = useEnvironments();
   // The page reads every connected server, so one of them offering pull requests is enough for
   // the link to lead somewhere.
   const pullRequestsSupported = environments.some(
     (environment) => environment.serverConfig?.environment.capabilities.pullRequests === true,
+  );
+  const scheduledPromptsSupported = environments.some(
+    (environment) => environment.serverConfig?.environment.capabilities.scheduledPrompts === true,
   );
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) {
@@ -168,6 +174,10 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const handleSettingsClick = useCallback(() => {
     closeMobileSidebar();
     void navigate({ to: "/settings" });
+  }, [closeMobileSidebar, navigate]);
+  const handleSchedulesClick = useCallback(() => {
+    closeMobileSidebar();
+    void navigate({ to: "/schedules" });
   }, [closeMobileSidebar, navigate]);
 
   const handleUsageClick = useCallback(() => {
@@ -207,6 +217,13 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               icon={<GitPullRequestIcon />}
               label="Pull Requests"
               onClick={handlePullRequestsClick}
+            />
+          ) : null}
+          {scheduledPromptsSupported ? (
+            <SidebarUtilityItem
+              icon={<CalendarClockIcon />}
+              label="Scheduled prompts"
+              onClick={handleSchedulesClick}
             />
           ) : null}
           <SidebarUtilityItem

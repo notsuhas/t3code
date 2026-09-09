@@ -107,6 +107,7 @@ import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as UsageLimitSources from "./usage/UsageLimitSources.ts";
+import { ScheduledPromptScheduler } from "./scheduledPrompts/ScheduledPromptScheduler.ts";
 import * as Keybindings from "./keybindings.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as RemoteOpenTargets from "./environment/RemoteOpenTargets.ts";
@@ -544,6 +545,7 @@ const buildAppUnderTest = (options?: {
     desktopTelemetryReceiver?: Partial<
       DesktopTelemetryReceiver.DesktopTelemetryReceiver["Service"]
     >;
+    scheduledPromptScheduler?: Partial<ScheduledPromptScheduler["Service"]>;
   };
 }) =>
   Effect.gen(function* () {
@@ -1049,6 +1051,11 @@ const buildAppUnderTest = (options?: {
           clearProviderSessionContinuationMarkers: () => Effect.void,
           enqueueCommand: (effect) => effect,
           ...options?.layers?.serverRuntimeStartup,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(ScheduledPromptScheduler)({
+          ...options?.layers?.scheduledPromptScheduler,
         }),
       ),
       Layer.provide(

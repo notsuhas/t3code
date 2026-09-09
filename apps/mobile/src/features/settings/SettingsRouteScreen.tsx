@@ -576,11 +576,18 @@ function ConfiguredSettingsRouteScreen() {
 }
 
 function GeneralSettingsSection() {
+  const { environments } = useEnvironments();
+  const schedulesSupported = environments.some(
+    (environment) => environment.serverConfig?.environment.capabilities.scheduledPrompts === true,
+  );
   return (
     <SettingsSection title="General">
       <SettingsRow icon="folder" label="Project Grouping" target="SettingsProjectGrouping" />
       <AutoSettleSettingsRows />
       <SettingsRow icon="chart.bar.xaxis" label="Usage" target="SettingsUsage" />
+      {schedulesSupported ? (
+        <SettingsRow icon="clock" label="Scheduled Prompts" target="SettingsSchedules" />
+      ) : null}
     </SettingsSection>
   );
 }

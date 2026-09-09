@@ -224,6 +224,21 @@ import {
 import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
 import {
+  ScheduledPrompt,
+  ScheduledPromptCreateInput,
+  ScheduledPromptDeleteInput,
+  ScheduledPromptError,
+  ScheduledPromptGetInput,
+  ScheduledPromptListResult,
+  ScheduledPromptRevision,
+  ScheduledPromptRun,
+  ScheduledPromptRunListResult,
+  ScheduledPromptRunNowInput,
+  ScheduledPromptRunsInput,
+  ScheduledPromptSetEnabledInput,
+  ScheduledPromptUpdateInput,
+} from "./scheduledPrompts.ts";
+import {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
   SourceControlDiscoveryResult,
@@ -339,6 +354,17 @@ export const WS_METHODS = {
   // Cloud environment methods
   cloudGetRelayClientStatus: "cloud.getRelayClientStatus",
   cloudInstallRelayClient: "cloud.installRelayClient",
+
+  // Scheduled prompts
+  scheduledPromptsList: "scheduledPrompts.list",
+  scheduledPromptsGet: "scheduledPrompts.get",
+  scheduledPromptsCreate: "scheduledPrompts.create",
+  scheduledPromptsUpdate: "scheduledPrompts.update",
+  scheduledPromptsDelete: "scheduledPrompts.delete",
+  scheduledPromptsSetEnabled: "scheduledPrompts.setEnabled",
+  scheduledPromptsRunNow: "scheduledPrompts.runNow",
+  scheduledPromptsRuns: "scheduledPrompts.runs",
+  scheduledPromptsSubscribe: "scheduledPrompts.subscribe",
 
   // Pull request methods
   pullRequestsList: "pullRequests.list",
@@ -600,6 +626,66 @@ const WsCloudInstallRelayClientRpc = Rpc.make(WS_METHODS.cloudInstallRelayClient
   payload: Schema.Struct({}),
   success: RelayClientInstallProgressEventSchema,
   error: Schema.Union([RelayClientInstallFailedError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+
+const scheduledPromptRpcError = Schema.Union([
+  ScheduledPromptError,
+  EnvironmentAuthorizationError,
+]);
+
+const WsScheduledPromptsListRpc = Rpc.make(WS_METHODS.scheduledPromptsList, {
+  payload: Schema.Struct({}),
+  success: ScheduledPromptListResult,
+  error: scheduledPromptRpcError,
+});
+
+const WsScheduledPromptsGetRpc = Rpc.make(WS_METHODS.scheduledPromptsGet, {
+  payload: ScheduledPromptGetInput,
+  success: ScheduledPrompt,
+  error: scheduledPromptRpcError,
+});
+
+const WsScheduledPromptsCreateRpc = Rpc.make(WS_METHODS.scheduledPromptsCreate, {
+  payload: ScheduledPromptCreateInput,
+  success: ScheduledPrompt,
+  error: scheduledPromptRpcError,
+});
+
+const WsScheduledPromptsUpdateRpc = Rpc.make(WS_METHODS.scheduledPromptsUpdate, {
+  payload: ScheduledPromptUpdateInput,
+  success: ScheduledPrompt,
+  error: scheduledPromptRpcError,
+});
+
+const WsScheduledPromptsDeleteRpc = Rpc.make(WS_METHODS.scheduledPromptsDelete, {
+  payload: ScheduledPromptDeleteInput,
+  success: Schema.Struct({}),
+  error: scheduledPromptRpcError,
+});
+
+const WsScheduledPromptsSetEnabledRpc = Rpc.make(WS_METHODS.scheduledPromptsSetEnabled, {
+  payload: ScheduledPromptSetEnabledInput,
+  success: ScheduledPrompt,
+  error: scheduledPromptRpcError,
+});
+
+const WsScheduledPromptsRunNowRpc = Rpc.make(WS_METHODS.scheduledPromptsRunNow, {
+  payload: ScheduledPromptRunNowInput,
+  success: ScheduledPromptRun,
+  error: scheduledPromptRpcError,
+});
+
+const WsScheduledPromptsRunsRpc = Rpc.make(WS_METHODS.scheduledPromptsRuns, {
+  payload: ScheduledPromptRunsInput,
+  success: ScheduledPromptRunListResult,
+  error: scheduledPromptRpcError,
+});
+
+const WsScheduledPromptsSubscribeRpc = Rpc.make(WS_METHODS.scheduledPromptsSubscribe, {
+  payload: Schema.Struct({}),
+  success: ScheduledPromptRevision,
+  error: scheduledPromptRpcError,
   stream: true,
 });
 
@@ -1218,6 +1304,15 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetBackgroundPolicyRpc,
   WsCloudGetRelayClientStatusRpc,
   WsCloudInstallRelayClientRpc,
+  WsScheduledPromptsListRpc,
+  WsScheduledPromptsGetRpc,
+  WsScheduledPromptsCreateRpc,
+  WsScheduledPromptsUpdateRpc,
+  WsScheduledPromptsDeleteRpc,
+  WsScheduledPromptsSetEnabledRpc,
+  WsScheduledPromptsRunNowRpc,
+  WsScheduledPromptsRunsRpc,
+  WsScheduledPromptsSubscribeRpc,
   WsPullRequestsListRpc,
   WsPullRequestsListStatsRpc,
   WsPullRequestsSummaryRpc,

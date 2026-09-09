@@ -41,6 +41,7 @@ import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import * as ProviderService from "./provider/Services/ProviderService.ts";
 import * as ProviderSessionDirectory from "./provider/Services/ProviderSessionDirectory.ts";
 import * as ProviderSessionReaper from "./provider/Services/ProviderSessionReaper.ts";
+import { ScheduledPromptReactor } from "./scheduledPrompts/ScheduledPromptScheduler.ts";
 import { forkParked } from "./serverActivation.ts";
 import * as ServiceLauncherClient from "./cloud/serviceLauncherClient.ts";
 import * as GitVcsDriver from "./vcs/GitVcsDriver.ts";
@@ -565,6 +566,7 @@ export const reconcileProviderSessions = Effect.gen(function* () {
       Option.isSome(binding) &&
       readRuntimePayload(binding.value.runtimePayload).activeTurnId === null &&
       readRuntimePayload(binding.value.runtimePayload).continueAfterServerUpdatePrepared === true;
+    const isScheduledPromptThread = String(thread.id).startsWith("scheduled:");
     // Runtime events advance the projection's turn, but not the directory's
     // last admitted turn. Use the projection to identify interrupted work.
     const interruptedByRestart =
@@ -633,6 +635,7 @@ export const reconcileProviderSessions = Effect.gen(function* () {
       });
 
     if (
+      !isScheduledPromptThread &&
       Option.isSome(binding) &&
       (continuationMarked || interruptedByRestart) &&
       (session.status === "running" || session.status === "starting" || preparedWhileReady) &&
@@ -810,6 +813,7 @@ export const make = (options?: StartupOptions) =>
     const keybindings = yield* Keybindings.Keybindings;
     const orchestrationReactor = yield* OrchestrationReactor.OrchestrationReactor;
     const providerSessionReaper = yield* ProviderSessionReaper.ProviderSessionReaper;
+    const scheduledPromptReactor = yield* Effect.serviceOption(ScheduledPromptReactor);
     const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
     const serverSettings = yield* ServerSettings.ServerSettingsService;
     const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
@@ -872,6 +876,9 @@ export const make = (options?: StartupOptions) =>
         Effect.gen(function* () {
           yield* orchestrationReactor.start().pipe(Scope.provide(reactorScope));
           yield* providerSessionReaper.start().pipe(Scope.provide(reactorScope));
+          if (Option.isSome(scheduledPromptReactor)) {
+            yield* scheduledPromptReactor.value.start().pipe(Scope.provide(reactorScope));
+          }
         }),
       );
 
@@ -969,6 +976,9 @@ export const make = (options?: StartupOptions) =>
       yield* options?.activate ?? Effect.void;
 
       yield* Effect.logDebug("Accepting commands");
+      if (Option.isSome(scheduledPromptReactor)) {
+        yield* scheduledPromptReactor.value.activate;
+      }
       yield* commandGate.signalCommandReady;
       yield* runStartupPhase(
         "ready.publish",

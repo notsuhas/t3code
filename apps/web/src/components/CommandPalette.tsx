@@ -39,6 +39,7 @@ import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import * as Option from "effect/Option";
 import {
   ArrowLeftIcon,
+  CalendarClockIcon,
   CornerLeftUpIcon,
   FileSearchIcon,
   FolderIcon,
@@ -1590,6 +1591,20 @@ function OpenCommandPaletteDialog(props: {
       run: copyActiveThreadReference,
     });
   }
+
+  actionItems.push({
+    kind: "action",
+    value: "action:scheduled-prompts",
+    searchTerms: ["schedule", "scheduled prompts", "automation", "recurring", "cron"],
+    title: "Open scheduled prompts",
+    icon: <CalendarClockIcon className={ITEM_ICON_CLASS} />,
+    disabled: !environments.some(
+      (environment) => environment.serverConfig?.environment.capabilities.scheduledPrompts === true,
+    ),
+    run: async () => {
+      await navigate({ to: "/schedules" });
+    },
+  });
 
   actionItems.push({
     kind: "action",
