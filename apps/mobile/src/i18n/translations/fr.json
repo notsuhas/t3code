@@ -5701,5 +5701,11 @@
   "99451a5d2d40440f": "Retirée par {by}.",
   "3ee30a50b70fffab": "Retirée par {by} : {reason}",
   "201490988858b511": "retirée par {by}",
-  "46d614fa7b4bf1e5": "Exécutions de workflow"
+  "46d614fa7b4bf1e5": "Exécutions de workflow",
+  "eb02fa861ac5ca21": "Demandes d'approbation",
+  "d68fb4a488d24848": "Questions pour vous",
+  "e9ed105d09f3e0b1": "Travail terminé",
+  "93e255b1cbd1a5ad": "Travail échoué",
+  "2cc0fbf2f53bca5b": "Impossible d'enregistrer le réglage d'alerte",
+  "80e9f16877fef48a": "M'alerter pour"
 }

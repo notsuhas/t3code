@@ -5701,5 +5701,11 @@
   "99451a5d2d40440f": "Retirada por {by}.",
   "3ee30a50b70fffab": "Retirada por {by}: {reason}",
   "201490988858b511": "retirada por {by}",
-  "46d614fa7b4bf1e5": "Execuções de workflow"
+  "46d614fa7b4bf1e5": "Execuções de workflow",
+  "eb02fa861ac5ca21": "Pedidos de aprovação",
+  "d68fb4a488d24848": "Perguntas para você",
+  "e9ed105d09f3e0b1": "Trabalho concluído",
+  "93e255b1cbd1a5ad": "Trabalho com falha",
+  "2cc0fbf2f53bca5b": "Não foi possível salvar a configuração de alertas",
+  "80e9f16877fef48a": "Me avisar sobre"
 }

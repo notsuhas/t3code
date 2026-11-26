@@ -135,6 +135,13 @@ function canManageConnect(
   );
 }
 
+const AGENT_ALERT_ROWS = [
+  { key: "notifyOnApproval", icon: "exclamationmark.circle", label: msg("Approval requests") },
+  { key: "notifyOnInput", icon: "questionmark.bubble", label: msg("Questions for you") },
+  { key: "notifyOnCompletion", icon: "checkmark.circle", label: msg("Finished work") },
+  { key: "notifyOnFailure", icon: "exclamationmark.triangle", label: msg("Failed work") },
+] as const;
+
 type NotificationStatus = "checking" | "enabled" | "disabled" | "unsupported";
 type LiveActivityStatus = "checking" | "enabled" | "disabled" | "signed-out" | "linking";
 
@@ -251,6 +258,29 @@ function ConfiguredSettingsNotificationsRouteScreen() {
 
   const connections = Object.values(savedConnectionsById);
   const environmentCount = connections.length;
+  const deviceNotificationsOn =
+    agentAwarenessPushAvailable && notificationStatus === "enabled" && notificationsReady;
+
+  const handleAlertEventChange = async (
+    key: (typeof AGENT_ALERT_ROWS)[number]["key"],
+    enabled: boolean,
+  ) => {
+    const result = await settleAsyncResult(() =>
+      runtime.runPromiseExit(
+        saveMobilePreferences
+          .run(appAtomRegistry, { [key]: enabled })
+          .pipe(Effect.andThen(refreshAgentAwarenessRegistration())),
+      ),
+    );
+    if (result._tag === "Success" || isAtomCommandInterrupted(result)) return;
+    const error = squashAtomCommandFailure(result);
+    Dialog.alert(
+      gt("Couldn't save alert setting"),
+      error instanceof Error
+        ? (errorDisplayMessage(error, resolveMessage) ?? error.message)
+        : gt("Try again."),
+    );
+  };
 
   const requestNotifications = async () => {
     const result = await settleAsyncResult(() =>
@@ -573,9 +603,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
               notificationStatus === "unsupported"
             }
             subtitle={agentAwarenessSubtitle}
-            value={
-              agentAwarenessPushAvailable && notificationStatus === "enabled" && notificationsReady
-            }
+            value={deviceNotificationsOn}
             onValueChange={handleDeviceNotificationsChange}
           />
           <SettingsSwitchRow
@@ -627,6 +655,22 @@ function ConfiguredSettingsNotificationsRouteScreen() {
             />
           ) : null}
         </SettingsSection>
+        {deviceNotificationsOn ? (
+          <SettingsSection title={gt("Alert me about")}>
+            {AGENT_ALERT_ROWS.map((row) => (
+              <SettingsSwitchRow
+                key={row.key}
+                icon={row.icon}
+                label={m(row.label)}
+                value={
+                  !AsyncResult.isSuccess(preferencesResult) ||
+                  preferencesResult.value[row.key] !== false
+                }
+                onValueChange={(enabled) => void handleAlertEventChange(row.key, enabled)}
+              />
+            ))}
+          </SettingsSection>
+        ) : null}
       </ScrollView>
     </SettingsScreen>
   );

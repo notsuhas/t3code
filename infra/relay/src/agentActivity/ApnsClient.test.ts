@@ -253,6 +253,59 @@ describe("ApnsClient", () => {
     }).pipe(Effect.provide(layerTest)),
   );
 
+  it.effect("collapses each thread's alerts into one notification", () => {
+    ApnsProviderTokens.__resetApnsProviderTokenCacheForTest();
+    const { privateKey } = NodeCrypto.generateKeyPairSync("ec", {
+      namedCurve: "prime256v1",
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const credentials = {
+      teamId: "team-collapse",
+      keyId: "key-collapse",
+      privateKey: Redacted.make(privateKey),
+      bundleId: "com.t3tools.test",
+      environment: "sandbox",
+    } satisfies ApnsCredentials;
+    const collapseIds: Array<string | undefined> = [];
+    const capturingHttpClient = HttpClient.make((request) => {
+      collapseIds.push(request.headers["apns-collapse-id"]);
+      return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status: 200 })));
+    });
+    const layer = ApnsClient.layer.pipe(
+      Layer.provide(ApnsProviderTokens.layer),
+      Layer.provide(Layer.succeed(HttpClient.HttpClient, capturingHttpClient)),
+    );
+
+    return Effect.gen(function* () {
+      const apns = yield* ApnsClient.ApnsClient;
+      const send = (threadId: string, body: string) =>
+        apns.sendPushNotificationRequest({
+          credentials,
+          issuedAtUnixSeconds: 1_000,
+          request: apns.makePushNotificationRequest({
+            token: "push-token",
+            notification: {
+              title: "Thread",
+              body,
+              environmentId: "e".repeat(191),
+              threadId,
+              deepLink: `/threads/env/${threadId}`,
+            },
+          }),
+        });
+
+      yield* send("t".repeat(512), "Needs input: Project");
+      yield* send("t".repeat(512), "Done: Project");
+      yield* send("other-thread", "Done: Project");
+
+      expect(collapseIds[0]).toMatch(/^[0-9a-f]{64}$/u);
+      expect(collapseIds[1]).toBe(collapseIds[0]);
+      expect(collapseIds[2]).not.toBe(collapseIds[0]);
+      ApnsProviderTokens.__resetApnsProviderTokenCacheForTest();
+    }).pipe(Effect.provide(layer));
+  });
+
   it.effect("reuses the signed provider JWT across pushes within the reuse window", () => {
     ApnsProviderTokens.__resetApnsProviderTokenCacheForTest();
     const { privateKey } = NodeCrypto.generateKeyPairSync("ec", {

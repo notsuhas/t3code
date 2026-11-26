@@ -131,7 +131,7 @@ object AgentNotifications {
     if (registered && fresh && NotificationManagerCompat.from(context).areNotificationsEnabled()) {
       channels(context)
       val scheme = prefs.getString("scheme", "t3code") ?: "t3code"
-      val alerted = showAlert(context, prefs, scheme, data)
+      val alerted = showAlert(context, prefs, scheme, data, updatedAt)
       updateActivity(context, prefs, data, updatedAt, alerted)
     }
   }
@@ -145,7 +145,8 @@ object AgentNotifications {
     context: Context,
     prefs: SharedPreferences,
     scheme: String,
-    data: Map<String, String>
+    data: Map<String, String>,
+    updatedAt: Long
   ): Boolean {
     // Queue retries carry the same alert id. Keep a bounded history even when
     // notification A is retried after notification B has already arrived.
@@ -159,15 +160,13 @@ object AgentNotifications {
       )
       val visibleThread = threadOnScreen
       val onScreen = resumed && visibleThread != null && data["alert_path"] == visibleThread
-      if (!onScreen) {
-        postAlert(context, scheme, data, alertId)
-      }
+      val posted = !onScreen && postAlert(context, scheme, data, alertId, updatedAt)
       prefs.edit().remove("seenAlerts").putString(
         "seenAlertsOrdered",
         (seen.takeLast(63) + alertId).joinToString("\n")
       ).apply()
       // Android drops posts to a blocked channel, so that alert shows nothing.
-      return !onScreen && (
+      return posted && (
         Build.VERSION.SDK_INT < 26 ||
           manager(context).getNotificationChannel(ALERT_CHANNEL)?.importance !=
           NotificationManager.IMPORTANCE_NONE
@@ -180,18 +179,27 @@ object AgentNotifications {
     context: Context,
     scheme: String,
     data: Map<String, String>,
-    alertId: String
-  ) {
+    alertId: String,
+    updatedAt: Long
+  ): Boolean {
     val title = data["alert_title"].orEmpty().take(120)
     // Grouped alerts list up to five 120-character thread titles.
     val body = data["alert_body"].orEmpty().take(608)
-    val id = alertId.hashCode()
-    val group = data["alert_group"]?.takeIf { it.isNotBlank() } ?: ALERT_TAG
+    val threadGroup = data["alert_group"]?.takeIf { it.isNotBlank() }
+    // A thread's next alert replaces its last one instead of stacking another.
+    val id = (threadGroup ?: alertId).hashCode()
+    val group = threadGroup ?: ALERT_TAG
+    // A late delivery of an older alert must not replace the thread's newer one.
+    if (manager(context).activeNotifications.any {
+        it.tag == ALERT_TAG && it.id == id && it.notification.`when` > updatedAt
+      }
+    ) return false
     val notification = base(context, ALERT_CHANNEL)
       .setContentTitle(title).setContentText(body)
       .setStyle(NotificationCompat.BigTextStyle().bigText(body))
       .setAutoCancel(true)
       .setGroup(group)
+      .setWhen(updatedAt)
       .setContentIntent(contentIntent(context, scheme, data["alert_path"], id))
       .build()
     manager(context).notify(ALERT_TAG, id, notification)
@@ -215,6 +223,7 @@ object AgentNotifications {
         .build()
       manager(context).notify("$ALERT_TAG-summary:$group", 0, summary)
     }
+    return true
   }
 
   /**
@@ -224,7 +233,7 @@ object AgentNotifications {
   @Synchronized
   fun showcase(context: Context, scheme: String, data: Map<String, String>) {
     channels(context)
-    data["alert_id"]?.let { postAlert(context, scheme, data, it) }
+    data["alert_id"]?.let { postAlert(context, scheme, data, it, System.currentTimeMillis()) }
     showActivity(context, scheme, data, data["active"] == "true", RUNNING_LIFETIME_MS)
   }
 

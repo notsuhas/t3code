@@ -358,6 +358,30 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     });
   });
 
+  it("sends each agent alert event as on unless the user turned it off", () => {
+    const request = (preferences: Preferences) =>
+      makeRelayDeviceRegistrationRequest({
+        deviceId: "device-1",
+        label: "Phone",
+        iosMajorVersion: 18,
+        notificationsEnabled: true,
+        preferences,
+      }).preferences;
+
+    expect(request({})).toMatchObject({
+      notifyOnApproval: true,
+      notifyOnInput: true,
+      notifyOnCompletion: true,
+      notifyOnFailure: true,
+    });
+    expect(request({ notifyOnCompletion: false, notifyOnFailure: false })).toMatchObject({
+      notifyOnApproval: true,
+      notifyOnInput: true,
+      notifyOnCompletion: false,
+      notifyOnFailure: false,
+    });
+  });
+
   it.effect("registers one push-token listener per Live Activity across wrappers", () => {
     const addPushTokenListener = vi.fn();
     // getInstances() returns a new wrapper for the same native activity each call.
@@ -833,6 +857,34 @@ describe("makeRelayDeviceRegistrationRequest", () => {
 
       expect(agentAwarenessNotificationsReady()).toBe(true);
       expect(onStatusChange).toHaveBeenCalled();
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+      Effect.provide(layerRelayTest),
+    );
+  });
+
+  it.effect("re-registers when the user turns an alert event off", () => {
+    const registrations = stubAndroidDeviceRelay();
+    vi.mocked(Notifications.getDevicePushTokenAsync).mockResolvedValue({
+      type: "android",
+      data: "fcm-token",
+    });
+    setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token-user-a"), "user-a");
+
+    return Effect.gen(function* () {
+      yield* runBackgroundOperations();
+      expect(registrations).toMatchObject([{ preferences: { notifyOnCompletion: true } }]);
+
+      vi.mocked(loadPreferences).mockResolvedValue({
+        liveActivitiesEnabled: false,
+        notifyOnCompletion: false,
+      });
+      yield* refreshAgentAwarenessRegistration();
+
+      expect(registrations).toHaveLength(2);
+      expect(registrations[1]).toMatchObject({
+        preferences: { notifyOnApproval: true, notifyOnCompletion: false },
+      });
     }).pipe(
       Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
       Effect.provide(layerRelayTest),

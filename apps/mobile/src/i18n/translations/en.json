@@ -5709,5 +5709,11 @@
   "99451a5d2d40440f": "Withdrawn by {by}.",
   "3ee30a50b70fffab": "Withdrawn by {by}: {reason}",
   "201490988858b511": "withdrawn by {by}",
-  "46d614fa7b4bf1e5": "Workflow runs"
+  "46d614fa7b4bf1e5": "Workflow runs",
+  "eb02fa861ac5ca21": "Approval requests",
+  "d68fb4a488d24848": "Questions for you",
+  "e9ed105d09f3e0b1": "Finished work",
+  "93e255b1cbd1a5ad": "Failed work",
+  "2cc0fbf2f53bca5b": "Couldn't save alert setting",
+  "80e9f16877fef48a": "Alert me about"
 }

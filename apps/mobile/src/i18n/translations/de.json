@@ -5707,5 +5707,11 @@
   "99451a5d2d40440f": "Zurückgezogen von {by}.",
   "3ee30a50b70fffab": "Zurückgezogen von {by}: {reason}",
   "201490988858b511": "zurückgezogen von {by}",
-  "46d614fa7b4bf1e5": "Workflow-Ausführungen"
+  "46d614fa7b4bf1e5": "Workflow-Ausführungen",
+  "eb02fa861ac5ca21": "Freigabeanfragen",
+  "d68fb4a488d24848": "Fragen an dich",
+  "e9ed105d09f3e0b1": "Abgeschlossene Arbeit",
+  "93e255b1cbd1a5ad": "Fehlgeschlagene Arbeit",
+  "2cc0fbf2f53bca5b": "Benachrichtigungseinstellung konnte nicht gespeichert werden",
+  "80e9f16877fef48a": "Benachrichtige mich bei"
 }

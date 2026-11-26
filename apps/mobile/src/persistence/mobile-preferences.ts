@@ -143,6 +143,11 @@ export interface Preferences {
   readonly pullRequestActivityVisibility?: PullRequestActivityVisibility;
   readonly pullRequestMergeMethod?: PullRequestMergeMethod;
   readonly liveActivitiesEnabled?: boolean;
+  /** Unset means on: each agent event sends an alert unless the user turns it off. */
+  readonly notifyOnApproval?: boolean;
+  readonly notifyOnInput?: boolean;
+  readonly notifyOnCompletion?: boolean;
+  readonly notifyOnFailure?: boolean;
   readonly themeId?: MobileThemeId;
   readonly lightThemeId?: MobileThemeId;
   readonly darkThemeId?: MobileThemeId;
@@ -230,6 +235,13 @@ export class MobilePreferencesStore extends Context.Service<
   }
 >()("@t3tools/mobile/persistence/mobile-preferences/MobilePreferencesStore") {}
 
+const AGENT_ALERT_PREFERENCE_KEYS = [
+  "notifyOnApproval",
+  "notifyOnInput",
+  "notifyOnCompletion",
+  "notifyOnFailure",
+] as const;
+
 const isToolCallVisibility = Schema.is(ToolCallVisibility);
 const isPullRequestMergeMethod = Schema.is(PullRequestMergeMethod);
 
@@ -242,6 +254,10 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     pullRequestActivityVisibility?: PullRequestActivityVisibility;
     pullRequestMergeMethod?: PullRequestMergeMethod;
     liveActivitiesEnabled?: boolean;
+    notifyOnApproval?: boolean;
+    notifyOnInput?: boolean;
+    notifyOnCompletion?: boolean;
+    notifyOnFailure?: boolean;
     themeId?: MobileThemeId;
     lightThemeId?: MobileThemeId;
     darkThemeId?: MobileThemeId;
@@ -311,6 +327,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
 
   if (typeof parsed.liveActivitiesEnabled === "boolean") {
     preferences.liveActivitiesEnabled = parsed.liveActivitiesEnabled;
+  }
+  for (const key of AGENT_ALERT_PREFERENCE_KEYS) {
+    if (typeof parsed[key] === "boolean") preferences[key] = parsed[key];
   }
   if (
     typeof parsed.themeId === "string" &&

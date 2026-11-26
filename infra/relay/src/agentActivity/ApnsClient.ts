@@ -1,6 +1,8 @@
+import { sha256 } from "@noble/hashes/sha2";
 import type { RelayAgentActivityAggregateState } from "@t3tools/contracts/relay";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Hex from "effect/encoding/Hex";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -42,6 +44,7 @@ interface ApnsLiveActivityRequest {
 interface ApnsPushNotificationRequest {
   readonly token: string;
   readonly priority: "10";
+  readonly collapseId: string;
   readonly payload: unknown;
 }
 
@@ -218,6 +221,10 @@ function makePushNotificationRequest(input: {
   return {
     token: input.token,
     priority: "10",
+    // A thread's next alert replaces its last one. APNs caps the id at 64 bytes.
+    collapseId: Hex.encode(
+      sha256(new TextEncoder().encode(notificationThreadId(input.notification))),
+    ),
     payload: {
       aps: {
         alert: {
@@ -359,6 +366,7 @@ const make = Effect.gen(function* () {
           authorization: `bearer ${jwt}`,
           "apns-priority": input.request.priority,
           "apns-push-type": "alert",
+          "apns-collapse-id": input.request.collapseId,
           "apns-topic": input.credentials.bundleId,
         }),
         HttpClientRequest.bodyJson(input.request.payload),

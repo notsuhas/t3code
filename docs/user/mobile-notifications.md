@@ -8,6 +8,11 @@ Get push alerts, Live Activities, and home-screen widgets on iOS and Android whe
 - Enable **Publish agent activity** in **Settings → Sharing & access** on the host.
 - Enable **Device Notifications** in **Settings → Notifications** on mobile (Android requires Android 7.0+ and Google Play services).
 
+## Choosing alerts
+
+- Under **Alert me about** in **Settings → Notifications**, choose which events send an alert: approval requests, questions for you, finished work, and failed work. Turn off **Finished work** to hear only from agents that need you or fail.
+- Each thread keeps one notification. Its newest alert replaces the last one.
+
 ## Live updates and widgets
 
 - **Live progress**: Enable **Live Activity Updates** (iOS), **Agent Live Updates** (Android 16+, check **Live Update Settings** if missing), or **Ongoing Agent Activity** (older Android). Finished results stay visible for up to 15 minutes.
