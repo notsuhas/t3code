@@ -152,64 +152,6 @@ class AgentNotificationsTest : AgentNotificationsFixture() {
   }
 
   @Test
-  fun aThreadsNextAlertReplacesItsLastOneAndThreadsBundleUnderOneSilentSummary() {
-    val now = System.currentTimeMillis()
-    val first = update("first", false) + mapOf(
-      "alert_body" to "Needs input: Test project",
-      "updated_at" to (now - 2000).toString(),
-    )
-    AgentNotifications.receive(context, first)
-    AgentNotifications.receive(context, update("second", false))
-    AgentNotifications.receive(
-      context,
-      update("other", false) + ("alert_group" to "environment/other")
-    )
-
-    assertEquals(2, manager.activeNotifications.count { it.tag == "t3-agent-alert" })
-    val thread = manager.activeNotifications.single { it.id == "environment/thread".hashCode() }
-    assertEquals(
-      "Done: Test project",
-      thread.notification.extras.getString(Notification.EXTRA_TEXT)
-    )
-    val summary = manager.activeNotifications.single {
-      it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0
-    }
-    assertEquals(null, summary.notification.sound)
-
-    AgentNotifications.clear(context)
-    assertTrue(manager.activeNotifications.isEmpty())
-  }
-
-  @Test
-  fun aLateOlderAlertStaysHiddenAfterTheNewerOneIsDismissed() {
-    val now = System.currentTimeMillis()
-    AgentNotifications.receive(context, update("newer", false) + ("updated_at" to now.toString()))
-    manager.cancelAll()
-    AgentNotifications.receive(
-      context,
-      update("older", false) + ("updated_at" to (now - 1000).toString())
-    )
-
-    assertTrue(manager.activeNotifications.none { it.tag == "t3-agent-alert" })
-  }
-
-  @Test
-  fun aLateOlderAlertDoesNotReplaceTheThreadsNewerOne() {
-    val now = System.currentTimeMillis()
-    AgentNotifications.receive(context, update("newer", false) + ("updated_at" to now.toString()))
-    AgentNotifications.receive(
-      context,
-      update("older", false) + mapOf(
-        "alert_body" to "Needs input: Test project",
-        "updated_at" to (now - 1000).toString(),
-      )
-    )
-
-    val alert = manager.activeNotifications.single().notification
-    assertEquals("Done: Test project", alert.extras.getString(Notification.EXTRA_TEXT))
-  }
-
-  @Test
   fun groupedAlertDisplaysEveryThreadAndRetriesStaySilent() {
     val titles = (1..5).map { "Thread $it " + "x".repeat(111) }.joinToString(", ")
     val grouped = update("group-completion", false) + mapOf(
@@ -875,4 +817,89 @@ class AgentNotificationsCompletionTest : AgentNotificationsFixture() {
 
   private fun alertWhen() =
     manager.activeNotifications.single { it.tag == "t3-agent-alert" }.notification.`when`
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [24, 26, 33, 36], manifest = Config.NONE)
+class AgentNotificationsReplacementTest : AgentNotificationsFixture() {
+  @Test
+  fun aThreadsNextAlertReplacesItsLastOneAndThreadsBundleUnderOneSilentSummary() {
+    val now = System.currentTimeMillis()
+    val first = update("first", false) + mapOf(
+      "alert_body" to "Needs input: Test project",
+      "updated_at" to (now - 2000).toString(),
+    )
+    AgentNotifications.receive(context, first)
+    AgentNotifications.receive(context, update("second", false))
+    AgentNotifications.receive(
+      context,
+      update("other", false) + ("alert_group" to "environment/other")
+    )
+
+    assertEquals(2, manager.activeNotifications.count { it.tag == "t3-agent-alert" })
+    val thread = manager.activeNotifications.single { it.id == "environment/thread".hashCode() }
+    assertEquals(
+      "Done: Test project",
+      thread.notification.extras.getString(Notification.EXTRA_TEXT)
+    )
+    val summary = manager.activeNotifications.single {
+      it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0
+    }
+    assertEquals(null, summary.notification.sound)
+
+    AgentNotifications.clear(context)
+    assertTrue(manager.activeNotifications.isEmpty())
+  }
+
+  @Test
+  fun aNewerEventReplacesTheThreadsAlertEvenWhenItsDeliveryWasStampedEarlier() {
+    val now = System.currentTimeMillis()
+    AgentNotifications.receive(
+      context,
+      update("approval", false) + mapOf(
+        "alert_body" to "Needs approval: Test project",
+        "alert_at" to (now - 2000).toString(),
+        "updated_at" to now.toString(),
+      )
+    )
+    AgentNotifications.receive(
+      context,
+      update("done", false) + mapOf(
+        "alert_at" to (now - 1000).toString(),
+        "updated_at" to (now - 500).toString(),
+      )
+    )
+
+    val alert = manager.activeNotifications.single { it.tag == "t3-agent-alert" }.notification
+    assertEquals("Done: Test project", alert.extras.getString(Notification.EXTRA_TEXT))
+  }
+
+  @Test
+  fun aLateOlderAlertStaysHiddenAfterTheNewerOneIsDismissed() {
+    val now = System.currentTimeMillis()
+    AgentNotifications.receive(context, update("newer", false) + ("updated_at" to now.toString()))
+    manager.cancelAll()
+    AgentNotifications.receive(
+      context,
+      update("older", false) + ("updated_at" to (now - 1000).toString())
+    )
+
+    assertTrue(manager.activeNotifications.none { it.tag == "t3-agent-alert" })
+  }
+
+  @Test
+  fun aLateOlderAlertDoesNotReplaceTheThreadsNewerOne() {
+    val now = System.currentTimeMillis()
+    AgentNotifications.receive(context, update("newer", false) + ("updated_at" to now.toString()))
+    AgentNotifications.receive(
+      context,
+      update("older", false) + mapOf(
+        "alert_body" to "Needs input: Test project",
+        "updated_at" to (now - 1000).toString(),
+      )
+    )
+
+    val alert = manager.activeNotifications.single().notification
+    assertEquals("Done: Test project", alert.extras.getString(Notification.EXTRA_TEXT))
+  }
 }

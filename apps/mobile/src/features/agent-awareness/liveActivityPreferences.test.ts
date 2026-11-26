@@ -15,7 +15,10 @@ import {
 import { MobileStorage } from "../../persistence/mobile-storage";
 import { CloudEnvironmentLinkError } from "../cloud/linkEnvironment";
 import { setLiveActivityUpdatesEnabled } from "./liveActivityPreferences";
-import { updateAgentAwarenessRegistrationPreferences } from "./remoteRegistration";
+import {
+  refreshAgentAwarenessRegistration,
+  updateAgentAwarenessRegistrationPreferences,
+} from "./remoteRegistration";
 
 vi.mock("expo-secure-store", () => ({
   deleteItemAsync: vi.fn(),
@@ -34,6 +37,7 @@ vi.mock("expo-constants", () => ({
 vi.mock("expo-device", () => ({}));
 
 vi.mock("./remoteRegistration", () => ({
+  refreshAgentAwarenessRegistration: vi.fn(() => Effect.void),
   updateAgentAwarenessRegistrationPreferences: vi.fn(() => Effect.void),
 }));
 
@@ -80,6 +84,34 @@ describe("liveActivityPreferences", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  it.effect(
+    "re-registers after the local save so an overlapping sync cannot keep the old value",
+    () =>
+      Effect.gen(function* () {
+        const order: Array<string> = [];
+        saveLocalPreference.mockImplementationOnce(() => Effect.sync(() => order.push("save")));
+        vi.mocked(refreshAgentAwarenessRegistration).mockImplementationOnce(() =>
+          Effect.sync(() => {
+            order.push("reconcile");
+          }),
+        );
+
+        yield* setLiveActivityUpdatesEnabled({
+          updateEnvironment,
+          linkEnvironment,
+          saveLocalPreference,
+          enabled: false,
+          previousEnabled: true,
+          clerkToken: "clerk-token",
+          connections: [connection],
+          canConfigureEnvironment: () => false,
+          canUpdateEnvironment: () => true,
+        });
+
+        expect(order).toEqual(["save", "reconcile"]);
+      }).pipe(withRelayClient),
+  );
 
   it.effect("restores only the device preference when an environment update fails", () => {
     const otherConnection = { ...connection, environmentId: "env-2" as EnvironmentId };

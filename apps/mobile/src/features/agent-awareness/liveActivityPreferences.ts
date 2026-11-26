@@ -5,7 +5,10 @@ import type { EnvironmentId } from "@t3tools/contracts";
 
 import type { SavedRemoteConnection } from "../../lib/connection";
 import type { CloudEnvironmentLinkError } from "../cloud/linkEnvironment";
-import { updateAgentAwarenessRegistrationPreferences } from "./remoteRegistration";
+import {
+  refreshAgentAwarenessRegistration,
+  updateAgentAwarenessRegistrationPreferences,
+} from "./remoteRegistration";
 
 export class LiveActivityEnvironmentUpdateError extends Schema.TaggedError<LiveActivityEnvironmentUpdateError>()(
   "LiveActivityEnvironmentUpdateError",
@@ -96,6 +99,8 @@ export const setLiveActivityUpdatesEnabled = Effect.fn("setLiveActivityUpdatesEn
   return yield* updateRelayPreference(input.enabled).pipe(
     // Saved here so a device that cannot keep the setting restores its registration too.
     Effect.tap(() => input.saveLocalPreference(input.enabled)),
+    // A registration that ran while environments updated read the old local value.
+    Effect.tap(() => refreshAgentAwarenessRegistration()),
     Effect.onError(() =>
       updateAgentAwarenessRegistrationPreferences({
         liveActivitiesEnabled: input.previousEnabled,

@@ -411,6 +411,15 @@ describe("Android delivery routing", () => {
     ).toMatchObject({ alert_title: "Second thread", alert_body: "Input: Project" });
   });
 
+  it("stamps an alert with when its event happened, not when it is sent", () => {
+    const alert = FcmDeliveries.androidAlertForState(
+      { ...state, phase: "completed", updatedAt: "1970-01-01T00:00:01.500Z" },
+      preferences,
+      1500,
+    );
+    expect(alert?.alert_at).toBe("1500");
+  });
+
   it("keeps notification groups distinct when identifiers contain slashes", () => {
     const left = FcmDeliveries.androidAlertForState(
       {

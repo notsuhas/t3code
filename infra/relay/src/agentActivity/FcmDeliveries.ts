@@ -58,6 +58,11 @@ export class FcmDeliveryError extends Schema.TaggedError<FcmDeliveryError>()("Fc
   }
 }
 
+// The device orders a thread's alerts by when the event happened, not when a job sent it.
+function alertEventTime(rows: ReadonlyArray<{ readonly updatedAt: string }>): string {
+  return String(Math.max(0, ...rows.map((row) => Date.parse(row.updatedAt) || 0)));
+}
+
 export function androidAlertForState(
   state: RelayAgentActivityState,
   preferences: RelayAgentAwarenessPreferences,
@@ -68,6 +73,7 @@ export function androidAlertForState(
   return {
     alert_id: JSON.stringify([state.environmentId, state.threadId, state.phase, state.updatedAt]),
     alert_group: JSON.stringify([state.environmentId, state.threadId]),
+    alert_at: alertEventTime([state]),
     alert_title: notification.title,
     alert_body: notification.body,
     alert_path: notification.deepLink,
@@ -94,6 +100,7 @@ export function androidAlertForAggregate(input: {
     return {
       alert_id: JSON.stringify([first.environmentId, first.threadId, first.phase, first.updatedAt]),
       alert_group: JSON.stringify([first.environmentId, first.threadId]),
+      alert_at: alertEventTime([first]),
       alert_title: notification.title,
       alert_body: notification.body,
       alert_path: notification.deepLink,
@@ -106,6 +113,7 @@ export function androidAlertForAggregate(input: {
         .map((row) => [row.environmentId, row.threadId, row.phase, row.updatedAt])
         .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
     ),
+    alert_at: alertEventTime(activities),
     alert_title: alert.title,
     alert_body: alert.body,
     // Target the overview so one visible thread cannot suppress other threads' alerts.

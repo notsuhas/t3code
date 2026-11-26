@@ -163,7 +163,9 @@ object AgentNotifications {
       )
       val visibleThread = threadOnScreen
       val onScreen = resumed && visibleThread != null && data["alert_path"] == visibleThread
-      val posted = !onScreen && postAlert(context, scheme, data, alertId, updatedAt)
+      // Relays before alert_at only send the delivery time.
+      val alertAt = data["alert_at"]?.toLongOrNull()?.takeIf { it > 0 } ?: updatedAt
+      val posted = !onScreen && postAlert(context, scheme, data, alertId, alertAt)
       prefs.edit().remove("seenAlerts").putString(
         "seenAlertsOrdered",
         (seen.takeLast(63) + alertId).joinToString("\n")
