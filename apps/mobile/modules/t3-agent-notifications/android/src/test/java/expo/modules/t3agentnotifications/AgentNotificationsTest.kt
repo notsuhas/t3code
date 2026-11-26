@@ -823,6 +823,20 @@ class AgentNotificationsCompletionTest : AgentNotificationsFixture() {
 @Config(sdk = [24, 26, 33, 36], manifest = Config.NONE)
 class AgentNotificationsReplacementTest : AgentNotificationsFixture() {
   @Test
+  fun aLateOlderAlertStaysHiddenAfterTheNewerOneArrivedWhileTheThreadWasOpen() {
+    val now = System.currentTimeMillis()
+    lifecycle.currentState = Lifecycle.State.RESUMED
+    AgentNotifications.receive(context, update("newer", false) + ("updated_at" to now.toString()))
+    lifecycle.currentState = Lifecycle.State.CREATED
+    AgentNotifications.receive(
+      context,
+      update("older", false) + ("updated_at" to (now - 1000).toString())
+    )
+
+    assertTrue(manager.activeNotifications.none { it.tag == "t3-agent-alert" })
+  }
+
+  @Test
   fun aThreadsNextAlertReplacesItsLastOneAndThreadsBundleUnderOneSilentSummary() {
     val now = System.currentTimeMillis()
     val first = update("first", false) + mapOf(

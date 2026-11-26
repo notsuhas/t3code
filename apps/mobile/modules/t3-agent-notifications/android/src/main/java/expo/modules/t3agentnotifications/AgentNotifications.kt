@@ -84,7 +84,7 @@ object AgentNotifications {
   fun clear(context: Context) {
     cancelActivity(context)
     context.getSharedPreferences(STORE, Context.MODE_PRIVATE).edit().clear().apply()
-    alertPostedAt.clear()
+    alertNewestAt.clear()
     val manager = manager(context)
     manager.activeNotifications.filter {
       it.tag == ACTIVITY_TAG || it.tag == ALERT_TAG ||
@@ -95,7 +95,7 @@ object AgentNotifications {
 
   @Volatile private var threadOnScreen: String? = null
 
-  private val alertPostedAt = mutableMapOf<Int, Long>()
+  private val alertNewestAt = mutableMapOf<Int, Long>()
 
   fun setThreadOnScreen(path: String?) {
     threadOnScreen = path
@@ -165,7 +165,14 @@ object AgentNotifications {
       val onScreen = resumed && visibleThread != null && data["alert_path"] == visibleThread
       // Relays before alert_at only send the delivery time.
       val alertAt = data["alert_at"]?.toLongOrNull()?.takeIf { it > 0 } ?: updatedAt
-      val posted = !onScreen && postAlert(context, scheme, data, alertId, alertAt)
+      val posted = if (onScreen) {
+        // The open thread shows this already; a late older alert must not post after it.
+        val id = alertNotificationId(data, alertId)
+        alertNewestAt[id] = maxOf(alertNewestAt[id] ?: Long.MIN_VALUE, alertAt)
+        false
+      } else {
+        postAlert(context, scheme, data, alertId, alertAt)
+      }
       prefs.edit().remove("seenAlerts").putString(
         "seenAlertsOrdered",
         (seen.takeLast(63) + alertId).joinToString("\n")
@@ -180,6 +187,10 @@ object AgentNotifications {
     return false
   }
 
+  // A thread's next alert replaces its last one instead of stacking another.
+  private fun alertNotificationId(data: Map<String, String>, alertId: String): Int =
+    (data["alert_group"]?.takeIf { it.isNotBlank() } ?: alertId).hashCode()
+
   private fun postAlert(
     context: Context,
     scheme: String,
@@ -190,13 +201,13 @@ object AgentNotifications {
     val title = data["alert_title"].orEmpty().take(120)
     // Grouped alerts list up to five 120-character thread titles.
     val body = data["alert_body"].orEmpty().take(608)
-    // A thread's next alert replaces its last one; threads bundle under one app group.
-    val id = (data["alert_group"]?.takeIf { it.isNotBlank() } ?: alertId).hashCode()
+    val id = alertNotificationId(data, alertId)
+    // Threads bundle under one app group.
     val group = ALERT_TAG
     // Read before notify(), which the system records asynchronously.
     val shown = manager(context).activeNotifications.filter { it.tag == ALERT_TAG }
     val newest = maxOf(
-      alertPostedAt[id] ?: Long.MIN_VALUE,
+      alertNewestAt[id] ?: Long.MIN_VALUE,
       shown.firstOrNull { it.id == id }?.notification?.`when` ?: Long.MIN_VALUE
     )
     // A late delivery of an older alert must not replace the thread's newer one.
@@ -210,7 +221,7 @@ object AgentNotifications {
       .setContentIntent(contentIntent(context, scheme, data["alert_path"], id))
       .build()
     manager(context).notify(ALERT_TAG, id, notification)
-    alertPostedAt[id] = updatedAt
+    alertNewestAt[id] = updatedAt
     val others = shown.filter { it.id != id && it.notification.group == group }
     if (others.isNotEmpty()) {
       val style = NotificationCompat.InboxStyle()
