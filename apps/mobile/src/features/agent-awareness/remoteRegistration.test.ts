@@ -11,6 +11,7 @@ import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 import { Cookies, FetchHttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
 import { ManagedRelay } from "@t3tools/client-runtime/relay";
 
@@ -923,6 +924,46 @@ describe("makeRelayDeviceRegistrationRequest", () => {
         false,
         true,
       ]);
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+      Effect.provide(layerRelayTest),
+    );
+  });
+
+  it.effect("a push-token lookup that never settles cannot block later registrations", () => {
+    const registrations = stubAndroidDeviceRelay();
+    vi.mocked(Notifications.getDevicePushTokenAsync).mockResolvedValue({
+      type: "android",
+      data: "fcm-token",
+    });
+    setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token-user-a"), "user-a");
+
+    return Effect.gen(function* () {
+      yield* runBackgroundOperations();
+
+      let markLookupStarted: () => void = () => {};
+      const lookupStarted = new Promise<void>((resolve) => {
+        markLookupStarted = resolve;
+      });
+      vi.mocked(Notifications.getDevicePushTokenAsync).mockImplementationOnce(() => {
+        markLookupStarted();
+        return new Promise(() => {});
+      });
+      const hung = yield* Effect.forkChild(refreshAgentAwarenessRegistration());
+      yield* Effect.promise(() => lookupStarted);
+      yield* TestClock.adjust("15 seconds");
+      yield* Fiber.join(hung);
+
+      vi.mocked(loadPreferences).mockResolvedValue({
+        liveActivitiesEnabled: false,
+        notifyOnCompletion: false,
+      });
+      yield* updateAgentAwarenessRegistrationPreferences({});
+
+      expect(registrations.at(-1)).toMatchObject({
+        pushToken: "fcm-token",
+        preferences: { notifyOnCompletion: false },
+      });
     }).pipe(
       Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
       Effect.provide(layerRelayTest),

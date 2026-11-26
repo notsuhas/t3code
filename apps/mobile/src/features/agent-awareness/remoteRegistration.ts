@@ -334,6 +334,9 @@ const nativePushTokenRegistration = Effect.fn("remoteRegistration.nativePushToke
         }),
       ),
       Effect.orElseSucceed(() => null),
+      // A lookup that never settles must not hold the registration lock.
+      Effect.timeoutOption("15 seconds"),
+      Effect.map((lookup) => (lookup._tag === "Some" ? lookup.value : null)),
     );
     const lookedUpPushToken =
       token?.type === Platform.OS && typeof token.data === "string" && token.data.trim().length > 0
