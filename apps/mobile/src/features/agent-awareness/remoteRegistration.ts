@@ -374,7 +374,19 @@ const relayToken = Effect.fn("remoteRegistration.relayToken")(function* (
   return yield* Effect.tryPromise({
     try: provider,
     catch: (cause) => new AgentAwarenessOperationError({ operation, cause }),
-  });
+  }).pipe(
+    // Registrations share one lock, so a sign-in token read that never settles must not hold it.
+    Effect.timeoutOrElse({
+      duration: "15 seconds",
+      orElse: () =>
+        Effect.fail(
+          new AgentAwarenessOperationError({
+            operation,
+            cause: new Error("Relay token lookup timed out."),
+          }),
+        ),
+    }),
+  );
 });
 
 function registrationSignature(body: RelayDeviceRegistrationRequest): string {

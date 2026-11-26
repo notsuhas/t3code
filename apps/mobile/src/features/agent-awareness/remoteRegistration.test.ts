@@ -973,6 +973,45 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     );
   });
 
+  it.effect("a sign-in token read that never settles cannot block later registrations", () => {
+    const registrations = stubAndroidDeviceRelay();
+    vi.mocked(Notifications.getDevicePushTokenAsync).mockResolvedValue({
+      type: "android",
+      data: "fcm-token",
+    });
+    let stall = false;
+    let markStalled: () => void = () => {};
+    const stalled = new Promise<void>((resolve) => {
+      markStalled = resolve;
+    });
+    setAgentAwarenessRelayTokenProvider(() => {
+      if (!stall) return Promise.resolve("clerk-token-user-a");
+      stall = false;
+      markStalled();
+      return new Promise(() => {});
+    }, "user-a");
+
+    return Effect.gen(function* () {
+      yield* runBackgroundOperations();
+
+      stall = true;
+      vi.mocked(loadPreferences).mockResolvedValue({
+        liveActivitiesEnabled: false,
+        notifyOnCompletion: false,
+      });
+      const hung = yield* Effect.forkChild(refreshAgentAwarenessRegistration());
+      yield* Effect.promise(() => stalled);
+      yield* TestClock.adjust("15 seconds");
+      yield* Fiber.join(hung);
+      yield* updateAgentAwarenessRegistrationPreferences({});
+
+      expect(registrations.at(-1)).toMatchObject({ preferences: { notifyOnCompletion: false } });
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+      Effect.provide(layerRelayTest),
+    );
+  });
+
   it.effect("an in-flight refresh cannot land its older alert choice after a newer one", () => {
     const registrations = stubAndroidDeviceRelay();
     vi.mocked(Notifications.getDevicePushTokenAsync).mockResolvedValue({
