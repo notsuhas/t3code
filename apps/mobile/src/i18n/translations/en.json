@@ -5715,5 +5715,7 @@
   "e9ed105d09f3e0b1": "Finished work",
   "93e255b1cbd1a5ad": "Failed work",
   "2cc0fbf2f53bca5b": "Couldn't save alert setting",
-  "80e9f16877fef48a": "Alert me about"
+  "80e9f16877fef48a": "Alert me about",
+  "b94edc789756383a": "Couldn't update {product}",
+  "5fd6311daa1d8f1e": "This phone kept the setting. {product} gets it the next time you open the app."
 }

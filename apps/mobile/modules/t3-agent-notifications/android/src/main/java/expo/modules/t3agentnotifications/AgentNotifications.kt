@@ -185,10 +185,9 @@ object AgentNotifications {
     val title = data["alert_title"].orEmpty().take(120)
     // Grouped alerts list up to five 120-character thread titles.
     val body = data["alert_body"].orEmpty().take(608)
-    val threadGroup = data["alert_group"]?.takeIf { it.isNotBlank() }
-    // A thread's next alert replaces its last one instead of stacking another.
-    val id = (threadGroup ?: alertId).hashCode()
-    val group = threadGroup ?: ALERT_TAG
+    // A thread's next alert replaces its last one; threads bundle under one app group.
+    val id = (data["alert_group"]?.takeIf { it.isNotBlank() } ?: alertId).hashCode()
+    val group = ALERT_TAG
     // A late delivery of an older alert must not replace the thread's newer one.
     if (manager(context).activeNotifications.any {
         it.tag == ALERT_TAG && it.id == id && it.notification.`when` > updatedAt

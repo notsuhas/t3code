@@ -5707,5 +5707,7 @@
   "e9ed105d09f3e0b1": "Trabalho concluído",
   "93e255b1cbd1a5ad": "Trabalho com falha",
   "2cc0fbf2f53bca5b": "Não foi possível salvar a configuração de alertas",
-  "80e9f16877fef48a": "Me avisar sobre"
+  "80e9f16877fef48a": "Me avisar sobre",
+  "b94edc789756383a": "Não foi possível atualizar o {product}",
+  "5fd6311daa1d8f1e": "Este telefone manteve a configuração. O {product} vai recebê-la na próxima vez que você abrir o app."
 }

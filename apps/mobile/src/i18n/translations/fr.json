@@ -5707,5 +5707,7 @@
   "e9ed105d09f3e0b1": "Travail terminé",
   "93e255b1cbd1a5ad": "Travail échoué",
   "2cc0fbf2f53bca5b": "Impossible d'enregistrer le réglage d'alerte",
-  "80e9f16877fef48a": "M'alerter pour"
+  "80e9f16877fef48a": "M'alerter pour",
+  "b94edc789756383a": "Impossible de mettre à jour {product}",
+  "5fd6311daa1d8f1e": "Ce téléphone a conservé le réglage. {product} le recevra la prochaine fois que vous ouvrirez l'app."
 }

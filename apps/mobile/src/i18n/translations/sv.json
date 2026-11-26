@@ -5713,5 +5713,7 @@
   "e9ed105d09f3e0b1": "Färdigt arbete",
   "93e255b1cbd1a5ad": "Misslyckat arbete",
   "2cc0fbf2f53bca5b": "Det gick inte att spara aviseringsinställningen",
-  "80e9f16877fef48a": "Avisera mig om"
+  "80e9f16877fef48a": "Avisera mig om",
+  "b94edc789756383a": "Det gick inte att uppdatera {product}",
+  "5fd6311daa1d8f1e": "Telefonen sparade inställningen. {product} får den nästa gång du öppnar appen."
 }

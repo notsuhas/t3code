@@ -875,6 +875,17 @@ export function updateAgentAwarenessRegistrationPreferences(
   });
 }
 
+const preferenceSyncLock = Semaphore.makeUnsafe(1);
+
+/** Sends saved preferences after any earlier sync lands, so the relay ends on the newest choice. */
+export function syncAgentAwarenessPreferences(): Effect.Effect<
+  void,
+  AgentAwarenessRegistrationError,
+  AgentAwarenessRegistrationServices
+> {
+  return preferenceSyncLock.withPermits(1)(updateAgentAwarenessRegistrationPreferences({}));
+}
+
 export function __resetAgentAwarenessRemoteRegistrationForTest(): void {
   pushTokenSubscription?.remove();
   pushTokenSubscription = null;

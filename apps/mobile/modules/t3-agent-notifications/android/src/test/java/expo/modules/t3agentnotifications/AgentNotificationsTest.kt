@@ -82,9 +82,9 @@ class AgentNotificationsTest : AgentNotificationsFixture() {
   }
 
   @Test
-  fun alertsStackByThreadGroup() {
+  fun alertsShareOneAppGroup() {
     AgentNotifications.receive(context, update("grouped", false))
-    assertEquals("environment/thread", manager.activeNotifications.single().notification.group)
+    assertEquals("t3-agent-alert", manager.activeNotifications.single().notification.group)
   }
 
   @Test
@@ -152,7 +152,7 @@ class AgentNotificationsTest : AgentNotificationsFixture() {
   }
 
   @Test
-  fun aThreadsNextAlertReplacesItsLastOneAndOtherThreadsKeepTheirs() {
+  fun aThreadsNextAlertReplacesItsLastOneAndThreadsBundleUnderOneSilentSummary() {
     val now = System.currentTimeMillis()
     val first = update("first", false) + mapOf(
       "alert_body" to "Needs input: Test project",
@@ -165,12 +165,13 @@ class AgentNotificationsTest : AgentNotificationsFixture() {
       update("other", false) + ("alert_group" to "environment/other")
     )
 
-    assertEquals(2, manager.activeNotifications.size)
-    val thread = manager.activeNotifications.single { it.notification.group == "environment/thread" }
+    assertEquals(2, manager.activeNotifications.count { it.tag == "t3-agent-alert" })
+    val thread = manager.activeNotifications.single { it.id == "environment/thread".hashCode() }
     assertEquals("Done: Test project", thread.notification.extras.getString(Notification.EXTRA_TEXT))
-    assertTrue(manager.activeNotifications.none {
+    val summary = manager.activeNotifications.single {
       it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0
-    })
+    }
+    assertEquals(null, summary.notification.sound)
 
     AgentNotifications.clear(context)
     assertTrue(manager.activeNotifications.isEmpty())

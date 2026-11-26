@@ -49,6 +49,7 @@ import {
   getAgentAwarenessRegistrationStatus,
   refreshAgentAwarenessRegistration,
   subscribeAgentAwarenessRegistrationStatus,
+  syncAgentAwarenessPreferences,
 } from "../agent-awareness/remoteRegistration";
 import { connectionAtomRuntime } from "../../connection/runtime";
 import {
@@ -265,20 +266,29 @@ function ConfiguredSettingsNotificationsRouteScreen() {
     key: (typeof AGENT_ALERT_ROWS)[number]["key"],
     enabled: boolean,
   ) => {
+    const saved = await settleAsyncResult(() =>
+      runtime.runPromiseExit(saveMobilePreferences.run(appAtomRegistry, { [key]: enabled })),
+    );
+    if (saved._tag === "Failure") {
+      if (isAtomCommandInterrupted(saved)) return;
+      const error = squashAtomCommandFailure(saved);
+      Dialog.alert(
+        gt("Couldn't save alert setting"),
+        error instanceof Error
+          ? (errorDisplayMessage(error, resolveMessage) ?? error.message)
+          : gt("Try again."),
+      );
+      return;
+    }
     const result = await settleAsyncResult(() =>
-      runtime.runPromiseExit(
-        saveMobilePreferences
-          .run(appAtomRegistry, { [key]: enabled })
-          .pipe(Effect.andThen(refreshAgentAwarenessRegistration())),
-      ),
+      runtime.runPromiseExit(syncAgentAwarenessPreferences()),
     );
     if (result._tag === "Success" || isAtomCommandInterrupted(result)) return;
-    const error = squashAtomCommandFailure(result);
     Dialog.alert(
-      gt("Couldn't save alert setting"),
-      error instanceof Error
-        ? (errorDisplayMessage(error, resolveMessage) ?? error.message)
-        : gt("Try again."),
+      gt("Couldn't update {product}", { product: "T3 Connect" }),
+      gt("This phone kept the setting. {product} gets it the next time you open the app.", {
+        product: "T3 Connect",
+      }),
     );
   };
 

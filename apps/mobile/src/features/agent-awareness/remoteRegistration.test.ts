@@ -41,6 +41,7 @@ import {
   getAgentAwarenessRegistrationStatus,
   refreshActiveLiveActivityRemoteRegistration,
   refreshAgentAwarenessRegistration,
+  syncAgentAwarenessPreferences,
   registerLiveActivityPushToken,
   releaseAgentAwarenessRelayTokenProvider,
   setAgentAwarenessRelayTokenProvider,
@@ -879,7 +880,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
         liveActivitiesEnabled: false,
         notifyOnCompletion: false,
       });
-      yield* refreshAgentAwarenessRegistration();
+      yield* syncAgentAwarenessPreferences();
 
       expect(registrations).toHaveLength(2);
       expect(registrations[1]).toMatchObject({
