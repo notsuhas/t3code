@@ -84,7 +84,6 @@ object AgentNotifications {
   fun clear(context: Context) {
     cancelActivity(context)
     context.getSharedPreferences(STORE, Context.MODE_PRIVATE).edit().clear().apply()
-    alertNewestAt.clear()
     val manager = manager(context)
     manager.activeNotifications.filter {
       it.tag == ACTIVITY_TAG || it.tag == ALERT_TAG ||
@@ -95,7 +94,30 @@ object AgentNotifications {
 
   @Volatile private var threadOnScreen: String? = null
 
-  private val alertNewestAt = mutableMapOf<Int, Long>()
+  // Persisted so a late older alert stays hidden after Android reclaims the process.
+  private fun alertNewestAt(context: Context, id: Int): Long =
+    newestAlertTimes(context)[id] ?: Long.MIN_VALUE
+
+  private fun recordAlertAt(context: Context, id: Int, at: Long) {
+    val times = newestAlertTimes(context)
+    val newest = maxOf(times.remove(id) ?: Long.MIN_VALUE, at)
+    times[id] = newest
+    context.getSharedPreferences(STORE, Context.MODE_PRIVATE).edit().putString(
+      "alertNewestAt",
+      times.entries.toList().takeLast(64).joinToString("\n") { "${it.key}:${it.value}" }
+    ).apply()
+  }
+
+  private fun newestAlertTimes(context: Context): LinkedHashMap<Int, Long> {
+    val times = LinkedHashMap<Int, Long>()
+    context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
+      .getString("alertNewestAt", null)?.split('\n')?.forEach { line ->
+        val id = line.substringBeforeLast(':').toIntOrNull()
+        val at = line.substringAfterLast(':').toLongOrNull()
+        if (id != null && at != null) times[id] = at
+      }
+    return times
+  }
 
   fun setThreadOnScreen(path: String?) {
     threadOnScreen = path
@@ -168,7 +190,7 @@ object AgentNotifications {
       val posted = if (onScreen) {
         // The open thread shows this already; a late older alert must not post after it.
         val id = alertNotificationId(data, alertId)
-        alertNewestAt[id] = maxOf(alertNewestAt[id] ?: Long.MIN_VALUE, alertAt)
+        recordAlertAt(context, id, alertAt)
         false
       } else {
         postAlert(context, scheme, data, alertId, alertAt)
@@ -207,7 +229,7 @@ object AgentNotifications {
     // Read before notify(), which the system records asynchronously.
     val shown = manager(context).activeNotifications.filter { it.tag == ALERT_TAG }
     val newest = maxOf(
-      alertNewestAt[id] ?: Long.MIN_VALUE,
+      alertNewestAt(context, id),
       shown.firstOrNull { it.id == id }?.notification?.`when` ?: Long.MIN_VALUE
     )
     // A late delivery of an older alert must not replace the thread's newer one.
@@ -221,7 +243,7 @@ object AgentNotifications {
       .setContentIntent(contentIntent(context, scheme, data["alert_path"], id))
       .build()
     manager(context).notify(ALERT_TAG, id, notification)
-    alertNewestAt[id] = updatedAt
+    recordAlertAt(context, id, updatedAt)
     val others = shown.filter { it.id != id && it.notification.group == group }
     if (others.isNotEmpty()) {
       val style = NotificationCompat.InboxStyle()
