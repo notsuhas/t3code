@@ -167,7 +167,10 @@ class AgentNotificationsTest : AgentNotificationsFixture() {
 
     assertEquals(2, manager.activeNotifications.count { it.tag == "t3-agent-alert" })
     val thread = manager.activeNotifications.single { it.id == "environment/thread".hashCode() }
-    assertEquals("Done: Test project", thread.notification.extras.getString(Notification.EXTRA_TEXT))
+    assertEquals(
+      "Done: Test project",
+      thread.notification.extras.getString(Notification.EXTRA_TEXT)
+    )
     val summary = manager.activeNotifications.single {
       it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0
     }

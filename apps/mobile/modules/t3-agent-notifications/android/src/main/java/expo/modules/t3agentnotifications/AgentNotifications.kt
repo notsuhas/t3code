@@ -192,7 +192,9 @@ object AgentNotifications {
     if (manager(context).activeNotifications.any {
         it.tag == ALERT_TAG && it.id == id && it.notification.`when` > updatedAt
       }
-    ) return false
+    ) {
+      return false
+    }
     val notification = base(context, ALERT_CHANNEL)
       .setContentTitle(title).setContentText(body)
       .setStyle(NotificationCompat.BigTextStyle().bigText(body))
