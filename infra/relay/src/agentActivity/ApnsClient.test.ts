@@ -279,7 +279,7 @@ describe("ApnsClient", () => {
 
     return Effect.gen(function* () {
       const apns = yield* ApnsClient.ApnsClient;
-      const send = (threadId: string, body: string) =>
+      const send = (threadId: string, body: string, environmentId = "e".repeat(191)) =>
         apns.sendPushNotificationRequest({
           credentials,
           issuedAtUnixSeconds: 1_000,
@@ -288,7 +288,7 @@ describe("ApnsClient", () => {
             notification: {
               title: "Thread",
               body,
-              environmentId: "e".repeat(191),
+              environmentId,
               threadId,
               deepLink: `/threads/env/${threadId}`,
             },
@@ -302,6 +302,10 @@ describe("ApnsClient", () => {
       expect(collapseIds[0]).toMatch(/^[0-9a-f]{64}$/u);
       expect(collapseIds[1]).toBe(collapseIds[0]);
       expect(collapseIds[2]).not.toBe(collapseIds[0]);
+
+      yield* send("c", "Done: Project", "a/b");
+      yield* send("b/c", "Done: Project", "a");
+      expect(collapseIds[4]).not.toBe(collapseIds[3]);
       ApnsProviderTokens.__resetApnsProviderTokenCacheForTest();
     }).pipe(Effect.provide(layer));
   });

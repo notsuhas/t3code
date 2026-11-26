@@ -223,7 +223,11 @@ function makePushNotificationRequest(input: {
     priority: "10",
     // A thread's next alert replaces its last one. APNs caps the id at 64 bytes.
     collapseId: Hex.encode(
-      sha256(new TextEncoder().encode(notificationThreadId(input.notification))),
+      sha256(
+        new TextEncoder().encode(
+          JSON.stringify([input.notification.environmentId, input.notification.threadId]),
+        ),
+      ),
     ),
     payload: {
       aps: {
