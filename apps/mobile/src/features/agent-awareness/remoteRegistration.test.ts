@@ -41,7 +41,6 @@ import {
   getAgentAwarenessRegistrationStatus,
   refreshActiveLiveActivityRemoteRegistration,
   refreshAgentAwarenessRegistration,
-  syncAgentAwarenessPreferences,
   registerLiveActivityPushToken,
   releaseAgentAwarenessRelayTokenProvider,
   setAgentAwarenessRelayTokenProvider,
@@ -808,11 +807,14 @@ describe("makeRelayDeviceRegistrationRequest", () => {
     },
   );
 
-  const stubAndroidDeviceRelay = () => {
+  const stubAndroidDeviceRelay = (failRegistration: () => boolean = () => false) => {
     vi.spyOn(Platform, "OS", "get").mockReturnValue("android");
     vi.spyOn(Platform, "Version", "get").mockReturnValue(36);
     const registrations: Array<{
-      readonly preferences: { readonly notificationsEnabled: boolean };
+      readonly preferences: {
+        readonly notificationsEnabled: boolean;
+        readonly notifyOnCompletion: boolean;
+      };
     }> = [];
     vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
@@ -827,6 +829,7 @@ describe("makeRelayDeviceRegistrationRequest", () => {
       }
       if (request.url.endsWith("/v1/mobile/devices")) {
         registrations.push(await request.json());
+        if (failRegistration()) return new Response("unavailable", { status: 503 });
       }
       return Response.json({ ok: true });
     });
@@ -880,12 +883,92 @@ describe("makeRelayDeviceRegistrationRequest", () => {
         liveActivitiesEnabled: false,
         notifyOnCompletion: false,
       });
-      yield* syncAgentAwarenessPreferences();
+      yield* updateAgentAwarenessRegistrationPreferences({});
 
       expect(registrations).toHaveLength(2);
       expect(registrations[1]).toMatchObject({
         preferences: { notifyOnApproval: true, notifyOnCompletion: false },
       });
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+      Effect.provide(layerRelayTest),
+    );
+  });
+
+  it.effect("a failed registration makes the next sync send the current choice", () => {
+    let fail = false;
+    const registrations = stubAndroidDeviceRelay(() => fail);
+    vi.mocked(Notifications.getDevicePushTokenAsync).mockResolvedValue({
+      type: "android",
+      data: "fcm-token",
+    });
+    setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token-user-a"), "user-a");
+
+    return Effect.gen(function* () {
+      yield* runBackgroundOperations();
+
+      fail = true;
+      vi.mocked(loadPreferences).mockResolvedValue({
+        liveActivitiesEnabled: false,
+        notifyOnCompletion: false,
+      });
+      yield* Effect.flip(updateAgentAwarenessRegistrationPreferences({}));
+
+      fail = false;
+      vi.mocked(loadPreferences).mockResolvedValue({ liveActivitiesEnabled: false });
+      yield* updateAgentAwarenessRegistrationPreferences({});
+
+      expect(registrations.map((body) => body.preferences.notifyOnCompletion)).toEqual([
+        true,
+        false,
+        true,
+      ]);
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+      Effect.provide(layerRelayTest),
+    );
+  });
+
+  it.effect("an in-flight refresh cannot land its older alert choice after a newer one", () => {
+    const registrations = stubAndroidDeviceRelay();
+    vi.mocked(Notifications.getDevicePushTokenAsync).mockResolvedValue({
+      type: "android",
+      data: "fcm-token",
+    });
+    setAgentAwarenessRelayTokenProvider(() => Promise.resolve("clerk-token-user-a"), "user-a");
+
+    return Effect.gen(function* () {
+      yield* runBackgroundOperations();
+
+      let resolveLookup: (token: { type: "android"; data: string }) => void = () => {};
+      let markLookupStarted: () => void = () => {};
+      const lookupStarted = new Promise<void>((resolve) => {
+        markLookupStarted = resolve;
+      });
+      vi.mocked(Notifications.getDevicePushTokenAsync).mockImplementationOnce(() => {
+        markLookupStarted();
+        return new Promise((resolve) => {
+          resolveLookup = resolve;
+        });
+      });
+      const olderRefresh = yield* Effect.forkChild(refreshAgentAwarenessRegistration());
+      yield* Effect.promise(() => lookupStarted);
+
+      vi.mocked(loadPreferences).mockResolvedValue({
+        liveActivitiesEnabled: false,
+        notifyOnCompletion: false,
+      });
+      const deviceReads = vi.mocked(loadOrCreateAgentAwarenessDeviceId).mock.calls.length;
+      const newerSync = yield* updateAgentAwarenessRegistrationPreferences({}).pipe(
+        Effect.forkChild({ startImmediately: true }),
+      );
+      expect(vi.mocked(loadOrCreateAgentAwarenessDeviceId).mock.calls.length).toBe(deviceReads);
+
+      resolveLookup({ type: "android", data: "fcm-token" });
+      yield* Fiber.join(olderRefresh);
+      yield* Fiber.join(newerSync);
+
+      expect(registrations.at(-1)).toMatchObject({ preferences: { notifyOnCompletion: false } });
     }).pipe(
       Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
       Effect.provide(layerRelayTest),
@@ -929,9 +1012,10 @@ describe("makeRelayDeviceRegistrationRequest", () => {
       yield* Effect.promise(() => lookupStarted);
       const listener = vi.mocked(Notifications.addPushTokenListener).mock.calls.at(-1)![0];
       listener({ type: "android", data: "rotated-fcm-token" } as never);
-      yield* runBackgroundOperations();
+      // The rotation's registration waits for the in-flight refresh to finish.
       resolveStaleLookup({ type: "android", data: "fcm-token" });
       yield* Fiber.join(staleRefresh);
+      yield* runBackgroundOperations();
       vi.mocked(Notifications.getDevicePushTokenAsync).mockRejectedValueOnce(
         new Error("SERVICE_NOT_AVAILABLE"),
       );

@@ -73,6 +73,26 @@ describe("shared agent activity policy", () => {
     );
   });
 
+  it("alerts a question that follows a muted approval on the same thread", () => {
+    const approval = aggregate([{ ...state, phase: "waiting_for_approval" }]);
+    const question = aggregate([{ ...state, phase: "waiting_for_input" }]);
+
+    expect(
+      attentionTransitionRows({
+        previousAggregate: approval,
+        nextAggregate: question,
+        preferences: { ...preferences, notifyOnApproval: false },
+      }).map((row) => row.phase),
+    ).toEqual(["waiting_for_input"]);
+    expect(
+      attentionTransitionRows({
+        previousAggregate: approval,
+        nextAggregate: question,
+        preferences,
+      }),
+    ).toEqual([]);
+  });
+
   it("distinguishes equal thread IDs across environments", () => {
     const waiting = { ...state, phase: "waiting_for_input" as const };
     const other = { ...waiting, environmentId: EnvironmentId.make("other") };

@@ -49,7 +49,7 @@ import {
   getAgentAwarenessRegistrationStatus,
   refreshAgentAwarenessRegistration,
   subscribeAgentAwarenessRegistrationStatus,
-  syncAgentAwarenessPreferences,
+  updateAgentAwarenessRegistrationPreferences,
 } from "../agent-awareness/remoteRegistration";
 import { connectionAtomRuntime } from "../../connection/runtime";
 import {
@@ -281,7 +281,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
       return;
     }
     const result = await settleAsyncResult(() =>
-      runtime.runPromiseExit(syncAgentAwarenessPreferences()),
+      runtime.runPromiseExit(updateAgentAwarenessRegistrationPreferences({})),
     );
     if (result._tag === "Success" || isAtomCommandInterrupted(result)) return;
     Dialog.alert(

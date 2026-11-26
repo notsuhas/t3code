@@ -67,8 +67,13 @@ function alertAllowedForPhase(
 // A missing baseline is a replay, not a transition that should buzz the phone.
 export function attentionTransitionRows(input: TransitionInput) {
   if (input.previousAggregate === null) return [];
+  // Only a wait that could alert covers the next one; a muted approval must not hide a question.
   const previouslyAttention = new Set(
-    input.previousAggregate.activities.filter((row) => isAttentionPhase(row.phase)).map(rowKey),
+    input.previousAggregate.activities
+      .filter(
+        (row) => isAttentionPhase(row.phase) && alertAllowedForPhase(input.preferences, row.phase),
+      )
+      .map(rowKey),
   );
   return input.nextAggregate.activities.filter(
     (row) =>

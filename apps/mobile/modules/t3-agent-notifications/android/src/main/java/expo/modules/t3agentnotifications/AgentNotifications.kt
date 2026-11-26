@@ -84,6 +84,7 @@ object AgentNotifications {
   fun clear(context: Context) {
     cancelActivity(context)
     context.getSharedPreferences(STORE, Context.MODE_PRIVATE).edit().clear().apply()
+    alertPostedAt.clear()
     val manager = manager(context)
     manager.activeNotifications.filter {
       it.tag == ACTIVITY_TAG || it.tag == ALERT_TAG ||
@@ -93,6 +94,8 @@ object AgentNotifications {
   }
 
   @Volatile private var threadOnScreen: String? = null
+
+  private val alertPostedAt = mutableMapOf<Int, Long>()
 
   fun setThreadOnScreen(path: String?) {
     threadOnScreen = path
@@ -188,13 +191,14 @@ object AgentNotifications {
     // A thread's next alert replaces its last one; threads bundle under one app group.
     val id = (data["alert_group"]?.takeIf { it.isNotBlank() } ?: alertId).hashCode()
     val group = ALERT_TAG
+    // Read before notify(), which the system records asynchronously.
+    val shown = manager(context).activeNotifications.filter { it.tag == ALERT_TAG }
+    val newest = maxOf(
+      alertPostedAt[id] ?: Long.MIN_VALUE,
+      shown.firstOrNull { it.id == id }?.notification?.`when` ?: Long.MIN_VALUE
+    )
     // A late delivery of an older alert must not replace the thread's newer one.
-    if (manager(context).activeNotifications.any {
-        it.tag == ALERT_TAG && it.id == id && it.notification.`when` > updatedAt
-      }
-    ) {
-      return false
-    }
+    if (newest > updatedAt) return false
     val notification = base(context, ALERT_CHANNEL)
       .setContentTitle(title).setContentText(body)
       .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -204,14 +208,14 @@ object AgentNotifications {
       .setContentIntent(contentIntent(context, scheme, data["alert_path"], id))
       .build()
     manager(context).notify(ALERT_TAG, id, notification)
-    val children = manager(context).activeNotifications.filter {
-      it.tag == ALERT_TAG && it.notification.group == group
-    }
-    if (children.size > 1) {
+    alertPostedAt[id] = updatedAt
+    val others = shown.filter { it.id != id && it.notification.group == group }
+    if (others.isNotEmpty()) {
       val style = NotificationCompat.InboxStyle()
-      children.forEach {
+      others.forEach {
         style.addLine(it.notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT))
       }
+      style.addLine(body)
       val summary = base(context, ALERT_CHANNEL)
         .setContentTitle(title)
         .setContentText(body)

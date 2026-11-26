@@ -11,7 +11,7 @@ Get push alerts, Live Activities, and home-screen widgets on iOS and Android whe
 ## Choosing alerts
 
 - Under **Alert me about** in **Settings → Notifications**, choose which events send an alert: approval requests, questions for you, finished work, and failed work. Turn off **Finished work** to hear only from agents that need you or fail.
-- Each thread keeps one notification. Its newest alert replaces the last one.
+- A thread's newest alert replaces its previous one instead of adding another.
 
 ## Live updates and widgets
 

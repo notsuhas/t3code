@@ -441,10 +441,16 @@ const registerDeviceWithRelay = Effect.fn("remoteRegistration.registerDeviceWith
   }
 
   const client = yield* ManagedRelay.ManagedRelayClient;
-  yield* client.registerDevice({
-    clerkToken: token,
-    payload,
-  });
+  yield* client.registerDevice({ clerkToken: token, payload }).pipe(
+    // A lost response may hide an applied request, so the next sync must send whatever is current.
+    Effect.tapError(() =>
+      persisted === null || expectedGeneration !== deviceRegistrationGeneration
+        ? Effect.void
+        : storage
+            .saveAgentAwarenessRegistrationRecord({ identity, signature: "" })
+            .pipe(Effect.ignore),
+    ),
+  );
   if (expectedGeneration !== deviceRegistrationGeneration) {
     // Signed out while the request was in flight: the sign-out path already
     // reset the status and cleared the record for the next account, so a
@@ -693,7 +699,10 @@ function enqueueDeviceRegistration(input: DeviceRegistrationInput, context: stri
   startPendingDeviceRegistration();
 }
 
-const registerDevice = Effect.fn("remoteRegistration.registerDevice")(function* (
+// Serialized from preference read to saved signature, so an older snapshot never lands last.
+const registrationLock = Semaphore.makeUnsafe(1);
+
+const registerDeviceUnlocked = Effect.fn("remoteRegistration.registerDevice")(function* (
   input: RegisterDeviceInput = {},
   expectedGeneration = deviceRegistrationGeneration,
 ): Effect.fn.Return<void, AgentAwarenessRegistrationError, AgentAwarenessRegistrationServices> {
@@ -766,6 +775,11 @@ const registerDevice = Effect.fn("remoteRegistration.registerDevice")(function* 
     expectedGeneration,
   );
 });
+
+const registerDevice = (
+  input: RegisterDeviceInput = {},
+  expectedGeneration = deviceRegistrationGeneration,
+) => registrationLock.withPermits(1)(registerDeviceUnlocked(input, expectedGeneration));
 
 function ensurePushTokenListener(): void {
   if (pushTokenSubscription || !canRegisterPushNotifications()) {
@@ -873,17 +887,6 @@ export function updateAgentAwarenessRegistrationPreferences(
       ),
     );
   });
-}
-
-const preferenceSyncLock = Semaphore.makeUnsafe(1);
-
-/** Sends saved preferences after any earlier sync lands, so the relay ends on the newest choice. */
-export function syncAgentAwarenessPreferences(): Effect.Effect<
-  void,
-  AgentAwarenessRegistrationError,
-  AgentAwarenessRegistrationServices
-> {
-  return preferenceSyncLock.withPermits(1)(updateAgentAwarenessRegistrationPreferences({}));
 }
 
 export function __resetAgentAwarenessRemoteRegistrationForTest(): void {

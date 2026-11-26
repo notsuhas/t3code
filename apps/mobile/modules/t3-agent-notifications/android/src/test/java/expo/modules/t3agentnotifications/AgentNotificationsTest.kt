@@ -181,6 +181,19 @@ class AgentNotificationsTest : AgentNotificationsFixture() {
   }
 
   @Test
+  fun aLateOlderAlertStaysHiddenAfterTheNewerOneIsDismissed() {
+    val now = System.currentTimeMillis()
+    AgentNotifications.receive(context, update("newer", false) + ("updated_at" to now.toString()))
+    manager.cancelAll()
+    AgentNotifications.receive(
+      context,
+      update("older", false) + ("updated_at" to (now - 1000).toString())
+    )
+
+    assertTrue(manager.activeNotifications.none { it.tag == "t3-agent-alert" })
+  }
+
+  @Test
   fun aLateOlderAlertDoesNotReplaceTheThreadsNewerOne() {
     val now = System.currentTimeMillis()
     AgentNotifications.receive(context, update("newer", false) + ("updated_at" to now.toString()))
