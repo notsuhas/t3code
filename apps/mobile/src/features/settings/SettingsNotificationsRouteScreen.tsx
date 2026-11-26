@@ -670,6 +670,8 @@ function ConfiguredSettingsNotificationsRouteScreen() {
             {AGENT_ALERT_ROWS.map((row) => (
               <SettingsSwitchRow
                 key={row.key}
+                // A Live Activity change saves locally last; a sync before then would resend the old value.
+                disabled={liveActivityStatus === "linking"}
                 icon={row.icon}
                 label={m(row.label)}
                 value={
