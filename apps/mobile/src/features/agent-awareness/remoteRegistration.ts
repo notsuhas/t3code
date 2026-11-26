@@ -334,9 +334,17 @@ const nativePushTokenRegistration = Effect.fn("remoteRegistration.nativePushToke
         }),
       ),
       Effect.orElseSucceed(() => null),
-      // A lookup that never settles must not hold the registration lock.
-      Effect.timeoutOption("15 seconds"),
-      Effect.map((lookup) => (lookup._tag === "Some" ? lookup.value : null)),
+      // A stalled lookup fails rather than guess no token, which would turn off Android Live Updates.
+      Effect.timeoutOrElse({
+        duration: "15 seconds",
+        orElse: () =>
+          Effect.fail(
+            new AgentAwarenessOperationError({
+              operation: "read-native-push-token",
+              cause: new Error("Push token lookup timed out."),
+            }),
+          ),
+      }),
     );
     const lookedUpPushToken =
       token?.type === Platform.OS && typeof token.data === "string" && token.data.trim().length > 0

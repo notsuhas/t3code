@@ -949,18 +949,21 @@ describe("makeRelayDeviceRegistrationRequest", () => {
         markLookupStarted();
         return new Promise(() => {});
       });
-      const hung = yield* Effect.forkChild(refreshAgentAwarenessRegistration());
-      yield* Effect.promise(() => lookupStarted);
-      yield* TestClock.adjust("15 seconds");
-      yield* Fiber.join(hung);
-
       vi.mocked(loadPreferences).mockResolvedValue({
         liveActivitiesEnabled: false,
         notifyOnCompletion: false,
       });
+      const hung = yield* Effect.forkChild(refreshAgentAwarenessRegistration());
+      yield* Effect.promise(() => lookupStarted);
+      yield* TestClock.adjust("15 seconds");
+      yield* Fiber.join(hung);
+      // The stalled lookup sends nothing rather than a registration without its token.
+      expect(registrations).toHaveLength(1);
+
       yield* updateAgentAwarenessRegistrationPreferences({});
 
-      expect(registrations.at(-1)).toMatchObject({
+      expect(registrations).toHaveLength(2);
+      expect(registrations[1]).toMatchObject({
         pushToken: "fcm-token",
         preferences: { notifyOnCompletion: false },
       });
